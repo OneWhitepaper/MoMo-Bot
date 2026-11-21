@@ -11,6 +11,7 @@ import {
   CLOUD_HOME_SECRET_KEYS, CLOUD_SECRETS_FD_ENV, cloudHomeConfiguration, cloudHomeHost, cloudHomeSecrets, prepareCloudHomeVolume,
   withoutCloudSecrets, withoutIgnoredCloudKeys, type CloudHomeConfig,
 } from "./cloud-home.ts";
+import { DEFAULT_DATA_DIR_NAME } from "./data-dir.ts";
 import { procHidepid } from "./bot-box/hidepid.ts";
 import { boxMemory, heapSizeArgs } from "./box-memory.ts";
 import { clearRecordsFromOtherMachines } from "./data-dir-lease.ts";
@@ -185,7 +186,7 @@ export function tunnelCommand(bin: string, token: string): { command: string; ar
 
 /** The server's data directory on the volume. */
 export function cloudHomeDataDir(env: NodeJS.ProcessEnv, home: string): string {
-  return env.OMB_DATA_DIR || posix.join(home, ".openmausbot");
+  return env.OMB_DATA_DIR || posix.join(home, DEFAULT_DATA_DIR_NAME);
 }
 
 /** flock(1)'s exit status when another process holds the lock (its --conflict-exit-code). */
@@ -214,7 +215,7 @@ export function holdVolume(home: string, lock: VolumeLock = flockVolume): void {
     return;
   }
   closeSync(fd);
-  if (result.status === VOLUME_HELD) throw new Error("Another MausBot home is already running on this volume. No data was changed.");
+  if (result.status === VOLUME_HELD) throw new Error("Another MoMo bot home is already running on this volume. No data was changed.");
   const why = result.error?.message ?? (String(result.stderr ?? "").trim().split("\n")[0] || `exit ${result.status}`);
   throw new Error(`This home could not lock its volume (${why}), so it will not start: another home might be using it. No data was changed.`);
 }
@@ -394,7 +395,7 @@ export function startCloudHome(processEnv: NodeJS.ProcessEnv = process.env) {
   const home = processEnv.HOME || "/data";
   const env = root ? { ...processEnv, ...readCloudSecretsFile(home) } : processEnv;
   const config = cloudHomeConfiguration(env);
-  if (!config) throw new Error("This image runs a My Cloud machine for MausBot Cloud; set its boot contract (docs/cloud-pro.md).");
+  if (!config) throw new Error("This image runs a My Cloud machine for MoMo bot Cloud; set its boot contract (docs/cloud-pro.md).");
   // Linux hands orphans to process 1, and Node waits only for the children it started.
   if (process.pid === 1) console.warn("cloud home: this supervisor is process 1, so nothing collects the processes bots leave behind and they pile up as zombies. Keep the image's entrypoint (tini), or start the container with --init.");
   // Logged here once: the server child never sees what they are about.

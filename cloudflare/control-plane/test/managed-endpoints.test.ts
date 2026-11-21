@@ -11,7 +11,7 @@ import { forgetCachedCapacity } from "../src/tunnel-capacity";
 import { rolloutBucket } from "../src/relay";
 import { forgetTunnelRelease } from "../src/tunnel-release";
 
-const BASE_URL = "https://auth.openmausbot.test";
+const BASE_URL = env.BETTER_AUTH_URL;
 const CONNECTOR_TOKEN = "eyJhbGciOiJIUzI1NiJ9.test-only-connector-token.signature";
 /** An endpoint whose hostname is not under its account's suffix refuses to act. */
 const HOST_SUFFIX = env.COMPANION_HOST_SUFFIX;
@@ -3664,6 +3664,7 @@ const RELAY_SEED = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8A
 function relayVars(extra: Record<string, string> = {}): Record<string, string> {
   return {
     RELAY_TOKEN_SIGNING_KEY: RELAY_SEED,
+    RELAY_NODES: "relay1.openmausbot.com",
     RELAY_ROLLOUT_PERCENT: "100",
     RELAY_DISABLED: "0",
     RELAY_CAPABLE_MIN_VERSION: "0.1.145",

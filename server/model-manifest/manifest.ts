@@ -4,14 +4,16 @@
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 
+import { PRODUCT_NAME } from "../../shared/product-brand.ts";
 import { writeFileAtomic } from "../atomic.ts";
 import { DATA_DIR } from "../config.ts";
+import { configuredEndpoint } from "../configured-endpoint.ts";
 import type { ModelCatalog } from "../contracts.ts";
 import { parseVersionTriple, versionAtLeast, type VersionTriple } from "../drivers/acp/version-probe.ts";
 import { BUNDLED_MODEL_MANIFEST, bundledEngineCatalog, engineCatalogFrom } from "./bundled.ts";
 import { parseModelManifest, type ManifestEngine, type ManifestPrice, type ModelManifestData } from "./schema.ts";
 
-export const MODEL_MANIFEST_URL = "https://raw.githubusercontent.com/milind-soni/OpenMausBot/main/server/model-manifest/model-manifest.json";
+export const MANIFEST_URL_ENV = "OMB_MODEL_MANIFEST_URL";
 export const MANIFEST_DISABLE_ENV = "OMB_DISABLE_MODEL_MANIFEST_FETCH";
 export const MANIFEST_TTL_MS = 60 * 60 * 1000;
 /** GitHub's raw CDN caches about this long, so a shorter window buys nothing. */
@@ -43,6 +45,7 @@ function updatedAtMs(manifest: ModelManifestData): number {
 
 export class ModelManifestStore {
   private readonly options: ModelManifestOptions;
+  private readonly manifestUrl: URL | null;
   private readonly bundled: ModelManifestData;
   private readonly cachePath: string;
   private manifest: ModelManifestData;
@@ -54,6 +57,8 @@ export class ModelManifestStore {
 
   constructor(options: ModelManifestOptions) {
     this.options = options;
+    const env = options.env ?? process.env;
+    this.manifestUrl = env[MANIFEST_DISABLE_ENV] === "1" ? null : configuredEndpoint(env[MANIFEST_URL_ENV]);
     this.bundled = options.bundled ?? BUNDLED_MODEL_MANIFEST;
     this.manifest = this.bundled;
     this.cachePath = modelManifestCachePath(options.dataDir);
@@ -68,7 +73,7 @@ export class ModelManifestStore {
   }
 
   get fetchDisabled(): boolean {
-    return (this.options.env ?? process.env)[MANIFEST_DISABLE_ENV] === "1";
+    return this.manifestUrl === null;
   }
 
   /** The newest usable manifest. Reads the disk cache once and never waits on the network. */
@@ -85,8 +90,9 @@ export class ModelManifestStore {
 
   /** Skipped inside `ttlMs` of the last good fetch and for a while after a failed one, unless `force`. Concurrent calls share one request. Never throws. */
   refresh(options: { force?: boolean; ttlMs?: number } = {}): Promise<ModelManifestData> {
-    if (this.fetchDisabled) return Promise.resolve(this.current());
-    this.inflight ??= this.fetchAndStore(Boolean(options.force), options.ttlMs ?? MANIFEST_TTL_MS).finally(() => {
+    const url = this.manifestUrl;
+    if (!url) return Promise.resolve(this.current());
+    this.inflight ??= this.fetchAndStore(url, Boolean(options.force), options.ttlMs ?? MANIFEST_TTL_MS).finally(() => {
       this.inflight = undefined;
     });
     return this.inflight;
@@ -124,7 +130,7 @@ export class ModelManifestStore {
     return this.options.maxBytes ?? MANIFEST_MAX_BYTES;
   }
 
-  private async fetchAndStore(force: boolean, ttlMs: number): Promise<ModelManifestData> {
+  private async fetchAndStore(url: URL, force: boolean, ttlMs: number): Promise<ModelManifestData> {
     this.current();
     const now = this.now;
     // Expire timestamps from the future after a clock rollback; disk caches cross restarts, so a monotonic clock cannot be used.
@@ -135,7 +141,7 @@ export class ModelManifestStore {
 
     let fetched: ModelManifestData;
     try {
-      fetched = await this.download();
+      fetched = await this.download(url);
     } catch (error) {
       this.log(`could not refresh the model list (${message(error)}); keeping the current one`);
       return this.manifest;
@@ -163,12 +169,12 @@ export class ModelManifestStore {
     return this.manifest;
   }
 
-  private async download(): Promise<ModelManifestData> {
+  private async download(url: URL): Promise<ModelManifestData> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs ?? MANIFEST_FETCH_TIMEOUT_MS);
     try {
-      const response = await (this.options.fetch ?? fetch)(MODEL_MANIFEST_URL, {
-        headers: { accept: "application/json", "user-agent": "OpenMausBot" },
+      const response = await (this.options.fetch ?? fetch)(url.href, {
+        headers: { accept: "application/json", "user-agent": PRODUCT_NAME },
         // raw.githubusercontent.com answers directly; anywhere else is not the file we meant to read.
         redirect: "error",
         signal: controller.signal,
@@ -230,7 +236,7 @@ let backgroundTimer: ReturnType<typeof setInterval> | undefined;
 
 /** A sleeping machine's timers pause; the on-demand refresh covers the picker when it wakes. */
 export function startModelManifestRefresh(): void {
-  if (backgroundTimer) return;
+  if (backgroundTimer || modelManifest().fetchDisabled) return;
   modelManifest().refreshInBackground();
   backgroundTimer = setInterval(() => modelManifest().refreshInBackground(), MANIFEST_TTL_MS);
   backgroundTimer.unref();

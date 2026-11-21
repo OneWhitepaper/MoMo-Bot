@@ -1,3 +1,5 @@
+import { APP_URL_SCHEME } from "./app-links";
+
 export interface ThreadRefCandidate {
   botId: string;
   botName: string;
@@ -109,8 +111,9 @@ export interface ThreadRefAddress {
   botId?: string;
 }
 
-const THREAD_URL_PREFIX = "openmausbot://thread/";
-const BOT_URL_PREFIX = "openmausbot://bot/";
+const THREAD_URL_PREFIX = `${APP_URL_SCHEME}://thread/`;
+const THREAD_LINK_PREFIX = /^(?:momobot|openmausbot):\/\/thread\//i;
+const BOT_LINK_PREFIX = /^(?:momobot|openmausbot):\/\/bot\//i;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ID_LIMIT = 256;
 
@@ -155,7 +158,7 @@ export function takeThreadLinkFromLocation(): string | null {
 
 export function parseThreadRefUrl(value: string): ThreadRefAddress | null {
   const raw = value.trim();
-  if (!raw.toLowerCase().startsWith(THREAD_URL_PREFIX)) return null;
+  if (!THREAD_LINK_PREFIX.test(raw)) return null;
   let url: URL;
   try {
     url = new URL(raw);
@@ -183,7 +186,7 @@ export function parseThreadRefUrl(value: string): ThreadRefAddress | null {
 
 export function parseBotRefUrl(value: string): { botId: string } | null {
   const raw = value.trim();
-  if (!raw.toLowerCase().startsWith(BOT_URL_PREFIX)) return null;
+  if (!BOT_LINK_PREFIX.test(raw)) return null;
   let url: URL;
   try {
     url = new URL(raw);
@@ -206,7 +209,7 @@ export function parseBotRefUrl(value: string): { botId: string } | null {
 
 /** Even a link that fails strict parsing must never reach the shell as an external link. */
 export function looksLikeThreadRefUrl(value: string): boolean {
-  return value.trim().toLowerCase().startsWith(THREAD_URL_PREFIX);
+  return THREAD_LINK_PREFIX.test(value.trim());
 }
 
 export function isThreadUuid(value: string): boolean {
@@ -373,7 +376,7 @@ export function threadTokenFromPaste(
 ): { token: string; ref: ResolvedThreadRef } | null {
   const trimmed = pasted.trim();
   if (!trimmed) return null;
-  const wrapped = /^\[((?:\\.|[^\\\]])*)\]\((openmausbot:\/\/thread\/[^()\s]*)\)$/.exec(trimmed);
+  const wrapped = /^\[((?:\\.|[^\\\]])*)\]\(([^()\s]+)\)$/.exec(trimmed);
   const address = wrapped
     ? parseThreadRefUrl(wrapped[2])
     : parseThreadRefUrl(trimmed) ?? (isThreadUuid(trimmed) ? { threadId: trimmed } : null);

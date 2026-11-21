@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 
 import { COMPANION_INSTALLATION_CREDENTIAL_FIELD } from "../electron/companion-account-service.mjs";
+import { PRODUCT_NAME } from "../shared/product-brand.ts";
 import { normalizeControlPlaneURL } from "../electron/control-plane-client.mjs";
 import {
   APNS_TOKEN,
@@ -151,7 +152,7 @@ function pushableOf(value: unknown): PushableNotification | null {
  * relay takes. Reads the kind, the ids and the names; the title is the server's own line for that kind, from names. */
 export function phonePushNotification(notification: PushableNotification, room?: { id: string; name: string }): PhonePushNotification | null {
   if (!isPushKind(notification.kind) || !PUSH_ID.test(notification.botId) || !PUSH_ID.test(notification.threadId)) return null;
-  const botName = clip(notification.botName, PUSH_NAME_MAX) || "MausBot";
+  const botName = clip(notification.botName, PUSH_NAME_MAX) || PRODUCT_NAME;
   const roomName = room && PUSH_ID.test(room.id) ? clip(room.name, PUSH_NAME_MAX) : "";
   const language = conversationLanguage(notification.threadId);
   const who = roomName ? serverLine(language, "server.notify.inRoom", { bot: botName, room: roomName }) : botName;
@@ -444,15 +445,15 @@ export function phonePushAccess(controlPlane: unknown, credential: unknown): Pho
 
 /** Where this server's control-plane access comes from, first match wins: the desktop app's private message (its
  * credential lives in the OS store this process cannot read), OMB_PUSH_CREDENTIAL, a fleet's
- * OMB_INSTALLATION_CREDENTIAL, `openmausbot login`'s tunnel-account.json. OMB_CONTROL_PLANE_URL overrides the origin. */
+ * OMB_INSTALLATION_CREDENTIAL, `momobot login`'s tunnel-account.json. OMB_CONTROL_PLANE_URL supplies the origin for headless servers. */
 export class PhonePushAccessSource {
   private desktop: PhonePushAccess | null | undefined;
   private readonly env: NodeJS.ProcessEnv;
-  private readonly options: { tunnelFile: string; defaultControlPlane: string };
+  private readonly tunnelFile: string;
 
-  constructor(options: { env?: NodeJS.ProcessEnv; tunnelFile: string; defaultControlPlane: string }) {
+  constructor(options: { env?: NodeJS.ProcessEnv; tunnelFile: string }) {
     this.env = options.env ?? process.env;
-    this.options = options;
+    this.tunnelFile = options.tunnelFile;
   }
 
   /** The desktop app's message: true when it was one. */
@@ -465,22 +466,19 @@ export class PhonePushAccessSource {
     return true;
   }
 
-  private controlPlane(): string {
-    if (Object.hasOwn(this.env, "OMB_CONTROL_PLANE_URL")) return normalizeControlPlaneURL(this.env.OMB_CONTROL_PLANE_URL ?? "");
-    return this.options.defaultControlPlane;
-  }
-
   current(): PhonePushAccess | null {
     if (this.desktop !== undefined) return this.desktop;
+    const controlPlane = normalizeControlPlaneURL(this.env.OMB_CONTROL_PLANE_URL);
+    if (!controlPlane) return null;
     const fromEnv = this.env[PHONE_PUSH_CREDENTIAL_ENV]?.trim() || this.env.OMB_INSTALLATION_CREDENTIAL?.trim();
-    if (fromEnv) return phonePushAccess(this.controlPlane(), fromEnv);
+    if (fromEnv) return phonePushAccess(controlPlane, fromEnv);
     let document: unknown;
     try {
-      document = JSON.parse(readFileSync(this.options.tunnelFile, "utf8"));
+      document = JSON.parse(readFileSync(this.tunnelFile, "utf8"));
     } catch {
       return null;
     }
     const credential = document && typeof document === "object" ? (document as Record<string, unknown>)[COMPANION_INSTALLATION_CREDENTIAL_FIELD] : undefined;
-    return phonePushAccess(this.controlPlane(), credential);
+    return phonePushAccess(controlPlane, credential);
   }
 }

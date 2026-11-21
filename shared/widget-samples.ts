@@ -2,6 +2,11 @@
 // writes them, using every node type between them. Tests, the phone fixtures
 // and the verification recipe all read these.
 
+import { PRODUCT_NAME, PRODUCT_REPOSITORY_URL } from "./product-brand.ts";
+
+export const WIDGET_SAMPLE_IMAGE_URL = "https://raw.githubusercontent.com/OneWhitepaper/MoMo-Bot/codex/development/public/app-icon-512.png";
+export const WIDGET_SAMPLE_DOCS_URL = `${PRODUCT_REPOSITORY_URL}#readme`;
+
 const prRow = (number: number, title: string, detail: string, status: string, color: string) => ({
   type: "ListViewItem",
   gap: 3,
@@ -66,7 +71,7 @@ export const WIDGET_SAMPLES: Record<string, unknown> = {
   pullRequests: {
     type: "ListView",
     title: "Pull requests",
-    caption: "mausbot-mobile",
+    caption: "momobot-desktop",
     meta: "3 open",
     children: [
       prRow(750, "iOS: mid-turn steer", "#750 · 4 files · passed 2h ago", "Ready", "success"),
@@ -178,7 +183,7 @@ export const WIDGET_SAMPLES: Record<string, unknown> = {
     children: [
       { type: "ListViewItem", onClickAction: { type: "open_url", payload: { url: "https://developers.openai.com/api/docs/guides/chatkit-widgets" } }, children: [{ type: "Icon", name: "globe" }, { type: "Col", flex: 1, children: [{ type: "Text", value: "ChatKit widgets guide", weight: "medium" }, { type: "Caption", value: "developers.openai.com" }] }, { type: "Icon", name: "external-link", color: "tertiary" }] },
       { type: "ListViewItem", onClickAction: { type: "open_url", payload: { url: "https://widgets.chatkit.studio/gallery" } }, children: [{ type: "Icon", name: "globe" }, { type: "Col", flex: 1, children: [{ type: "Text", value: "Widget Builder gallery", weight: "medium" }, { type: "Caption", value: "widgets.chatkit.studio" }] }, { type: "Icon", name: "external-link", color: "tertiary" }] },
-      { type: "ListViewItem", children: [{ type: "Icon", name: "document" }, { type: "Col", flex: 1, children: [{ type: "Text", value: "shared/wire.ts", weight: "medium" }, { type: "Caption", value: "OpenMausBot · this computer" }] }] },
+      { type: "ListViewItem", children: [{ type: "Icon", name: "document" }, { type: "Col", flex: 1, children: [{ type: "Text", value: "shared/wire.ts", weight: "medium" }, { type: "Caption", value: `${PRODUCT_NAME} · this computer` }] }] },
     ],
   },
 
@@ -193,7 +198,7 @@ export const WIDGET_SAMPLES: Record<string, unknown> = {
       { type: "Text", value: "Body text with a longer line that wraps onto a second line when the card is narrow.", maxLines: 2 },
       { type: "Caption", value: "A caption in secondary ink", size: "sm" },
       { type: "Box", padding: 4, radius: "lg", background: "surface-secondary", children: [{ type: "Text", value: "Inside a box", weight: "semibold" }, { type: "Caption", value: "with padding and a surface" }] },
-      { type: "Image", src: "https://mausbot.com/og.png", alt: "MausBot", aspectRatio: "16/9", radius: "lg", frame: true },
+      { type: "Image", src: WIDGET_SAMPLE_IMAGE_URL, alt: PRODUCT_NAME, aspectRatio: "16/9", radius: "lg", frame: true },
       { type: "Transition", children: [{ type: "Text", value: "A transition wraps one child." }] },
       {
         type: "Form",
@@ -205,7 +210,7 @@ export const WIDGET_SAMPLES: Record<string, unknown> = {
           { type: "Input", name: "email", label: "Email", placeholder: "Optional: where Scout can reply" },
           { type: "Label", value: "Note", fieldName: "note" },
           { type: "Textarea", name: "note", placeholder: "Anything Scout should know?", rows: 3 },
-          { type: "Row", gap: 2, children: [{ type: "Button", label: "Send feedback", submit: true, style: "primary" }, { type: "Button", label: "Open the docs", variant: "outline", iconEnd: "external-link", onClickAction: { type: "open_url", payload: { url: "https://mausbot.com/docs" } } }, { type: "Button", label: "Ask me later", variant: "ghost", onClickAction: { type: "feedback.later" } }] },
+          { type: "Row", gap: 2, children: [{ type: "Button", label: "Send feedback", submit: true, style: "primary" }, { type: "Button", label: "Open the docs", variant: "outline", iconEnd: "external-link", onClickAction: { type: "open_url", payload: { url: WIDGET_SAMPLE_DOCS_URL } } }, { type: "Button", label: "Ask me later", variant: "ghost", onClickAction: { type: "feedback.later" } }] },
         ],
       },
     ],

@@ -12,6 +12,7 @@ import { companionEndpointCandidates, hostedCompanionUrl } from "./endpoints.ts"
 import { directRoutes, routedAddresses } from "./direct-routes.ts";
 import { lanInterfaces, tailnetName, tailscaleAddress } from "./listener.ts";
 import { defaultHostName } from "./mdns.ts";
+import { PRODUCT_NAME } from "./product-brand.ts";
 import { publicNetworks } from "./windows-network.ts";
 
 export const CONTROL_TOKEN_HEADER = "x-openmausbot-control-token";
@@ -380,7 +381,7 @@ function page(): string {
   return `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OpenMausBot Companion</title>
+<title>${PRODUCT_NAME} Companion</title>
 <style>
   :root { color-scheme: light dark; --fg: #111; --dim: #666; --line: #0002; --bg: #fff; --card: #fafafa; }
   @media (prefers-color-scheme: dark) {
@@ -406,7 +407,7 @@ function page(): string {
   .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
 <main>
-  <h1>OpenMausBot Companion</h1>
+  <h1>${PRODUCT_NAME} Companion</h1>
   <p class="sub">Your phone reaches this computer through here. Only pair a device you trust.</p>
   <section id="where"></section>
   <section id="pair"></section>
@@ -436,7 +437,7 @@ history.replaceState(null, "", location.pathname);
 async function api(path, method) {
   const res = await fetch(path, { method: method ?? "GET", headers: { "x-openmausbot-control-token": token } });
   if (res.status === 403) {
-    document.querySelector("main").innerHTML = "<h1>OpenMausBot Companion</h1><p class=sub>Open this page from the link the companion printed when it started.</p>";
+    document.querySelector("main").innerHTML = "<h1>${PRODUCT_NAME} Companion</h1><p class=sub>Open this page from the link the companion printed when it started.</p>";
     throw new Error("control token required");
   }
   return res.json();

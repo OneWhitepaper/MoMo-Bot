@@ -7,7 +7,7 @@ import type { MausColor } from "@/lib/mascot";
 import { reducedMotion } from "@/lib/onboarding";
 import type { TeamsAction, TeamsStep } from "@/lib/teams-whats-new";
 import type { LocaleKey } from "@/locales";
-import { TEAM_PLANS_URL } from "@/lib/app-links";
+import { configuredCloudPage } from "@/lib/app-links";
 import { CLOSE, PRIMARY, QUIET, SHEET } from "../cloud-buy/parts";
 import { LinkButton, NotNowButton } from "../NoticeCard";
 
@@ -90,6 +90,7 @@ export function TeamsPopup({ action, onStep, onStart, onDone }: {
         ? <button type="button" className={cn(PRIMARY, "ui-button-lg")} onClick={() => { onStart(); end("start_team"); }}>{t("teamsNew.start")}</button>
         : <LinkButton url={action.url} label={t("teamsNew.start")} className={cn(PRIMARY, "ui-button-lg gap-1.5")} onOpened={() => end("start_team")} />;
 
+  const plans = configuredCloudPage();
   return <div className="ui-scrim fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6" onMouseDown={event => { if (event.target === event.currentTarget) end("close"); }}>
     <div role="dialog" aria-modal="true" aria-labelledby={TITLE} data-teams-popup={action.kind} tabIndex={-1}
       className={cn(SHEET, "teams-card-in relative flex max-h-full w-full max-w-[460px] flex-col overflow-hidden outline-none")}>
@@ -107,7 +108,7 @@ export function TeamsPopup({ action, onStep, onStart, onDone }: {
           <p data-teams-price className="mt-3 text-[13px] leading-[18px] text-ink-secondary">{t("teamsNew.price")}</p>
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <div data-primary="">{main}</div>
-            <LinkButton url={TEAM_PLANS_URL} label={t("teamsNew.seePlans")} className={cn(QUIET, "ui-button-lg gap-1.5")} onOpened={() => end("see_team_plans")} />
+            {plans && <LinkButton url={plans} label={t("teamsNew.seePlans")} className={cn(QUIET, "ui-button-lg gap-1.5")} onOpened={() => end("see_team_plans")} />}
             {action.kind !== "got-it" && <NotNowButton onClick={() => end("not_now")} />}
           </div>
         </div>

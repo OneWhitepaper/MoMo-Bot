@@ -2,7 +2,7 @@ import { HEADLESS_VERBS } from "./headless/args.ts";
 
 export { HEADLESS_VERBS as HEADLESS_VERB_NAMES };
 
-/** Where a command line goes: the OpenMausBot account (`account login|logout|status`, and `login --email` or `--relay`
+/** Where a command line goes: the MoMo bot account (`account login|logout|status`, and `login --email` or `--relay`
  * as before) and the other classic commands to cli.ts, the headless verbs to headless/main.ts. */
 export function routeCli(argv: readonly string[]): { headless: boolean; argv: string[] } {
   if (argv[0] === "account") return { headless: false, argv: ["login", "logout", "status"].includes(argv[1] ?? "") ? argv.slice(1) : ["--help"] };
@@ -11,64 +11,68 @@ export function routeCli(argv: readonly string[]): { headless: boolean; argv: st
 }
 
 export const HEADLESS_USAGE = `Drive a running workspace (scripts, CI, other agents):
-  openmausbot login [SERVER]            sign this terminal in once: MausBot shows a card to allow it (logout, whoami, use NAME, servers)
-  openmausbot status                    every bot at a glance: working, waiting on you, paused, failed or idle, and its computer
-  openmausbot bots delete|pause|resume|stop (BOT… | --team T | --all)   act on bots; delete asks first (--yes, --dry-run)
-  openmausbot stop (BOT… | --team T | --all)   stop their work now, without pausing
-  openmausbot threads list|clear|delete BOT    a bot's conversations
-  openmausbot computers list|start|sleep       the bots' cloud computers
-  openmausbot doctor                    check the server answers and an engine is ready
-  openmausbot doctor --host             check this Linux machine can run a server (exit 7 if not)
-  openmausbot doctor --data [--fix]     check (and safely repair) this computer's data folder (exit 8 if a problem is left)
-  openmausbot bots | channels | models  your bots, your rooms, the engines and their models
-  openmausbot run BOT "do this"         give a bot one job and wait until it and every teammate it asked are done
-  openmausbot send BOT "text"           send one message and return at once
-  openmausbot wait BOT                  wait on work already running
-  openmausbot messages BOT              the latest messages of a conversation
-  openmausbot interrupt BOT [--tree]    press Stop (--tree: and every teammate on its job)
-  openmausbot export BOT --out DIR      write a job's transcripts, files and screens to DIR
-  openmausbot events [--job THREAD]     the server's live events as JSON lines
-  openmausbot team apply FILE           make the workspace match a team file (team export writes one)
-  openmausbot engine set claude --key-env ANTHROPIC_API_KEY   give it an engine without a screen
-  openmausbot connect URL --code CODE --out FILE              get a token for a workspace elsewhere
-  openmausbot token create NAME --out FILE [--expires 90d]    a token for CI that ends on its date (token list, token revoke ID)
-  openmausbot new-bot | new-channel | set-model | edit | mcp
+  momobot login [SERVER]            sign this terminal in once: MoMo bot shows a card to allow it (logout, whoami, use NAME, servers)
+  momobot status                    every bot at a glance: working, waiting on you, paused, failed or idle, and its computer
+  momobot bots delete|pause|resume|stop (BOT… | --team T | --all)   act on bots; delete asks first (--yes, --dry-run)
+  momobot stop (BOT… | --team T | --all)   stop their work now, without pausing
+  momobot threads list|clear|delete BOT    a bot's conversations
+  momobot computers list|start|sleep       the bots' cloud computers
+  momobot doctor                    check the server answers and an engine is ready
+  momobot doctor --host             check this Linux machine can run a server (exit 7 if not)
+  momobot doctor --data [--fix]     check (and safely repair) this computer's data folder (exit 8 if a problem is left)
+  momobot bots | channels | models  your bots, your rooms, the engines and their models
+  momobot run BOT "do this"         give a bot one job and wait until it and every teammate it asked are done
+  momobot send BOT "text"           send one message and return at once
+  momobot wait BOT                  wait on work already running
+  momobot messages BOT              the latest messages of a conversation
+  momobot interrupt BOT [--tree]    press Stop (--tree: and every teammate on its job)
+  momobot export BOT --out DIR      write a job's transcripts, files and screens to DIR
+  momobot events [--job THREAD]     the server's live events as JSON lines
+  momobot team apply FILE           make the workspace match a team file (team export writes one)
+  momobot engine set claude --key-env ANTHROPIC_API_KEY   give it an engine without a screen
+  momobot connect URL --code CODE --out FILE              get a token for a workspace elsewhere
+  momobot token create NAME --out FILE [--expires 90d]    a token for CI that ends on its date (token list, token revoke ID)
+  momobot new-bot | new-channel | set-model | edit | mcp
 
   Server: --url URL (or OPENMAUSBOT_URL), --port N (or OMB_PORT), else the one you signed in to, else this computer's.
-  Token: your openmausbot login, or OPENMAUSBOT_TOKEN or --token-file FILE for scripts. --json prints one JSON document;
+  Token: your momobot login, or OPENMAUSBOT_TOKEN or --token-file FILE for scripts. --json prints one JSON document;
   progress goes to stderr (--quiet drops it). Exit: 0 done, 1 failed, 2 usage, 4 needs login, 5 not allowed,
-  6 busy, 7 not found. openmausbot help VERB for the details.`;
+  6 busy, 7 not found. momobot help VERB for the details.`;
 
-/** The usage text, its commands written the way this CLI was started (`npx openmausbot …`). */
-export function usage(prefix = "openmausbot"): string {
-  return USAGE.split("\n").map((line) => line.replace(/^(\s+)openmausbot(?= )/, `$1${prefix}`)).join("\n");
+/** The usage text, its commands written the way this CLI was started (`npx momobot …`). */
+export function usage(prefix = "momobot"): string {
+  return withCliPrefix(USAGE, prefix);
 }
 
-export const USAGE = `openmausbot — your team of AI bots, ready in a few steps
+export function withCliPrefix(text: string, prefix: string): string {
+  return text.replace(/^(\s*)momobot(?= )/gm, (_match, space: string) => `${space}${prefix}`);
+}
 
-  openmausbot                         set up once, then open your workspace
-  openmausbot setup [--data-dir DIR]
-  openmausbot start [the same options as serve]
-  openmausbot serve [--port 8799] [--data-dir DIR] [--label NAME]
+export const USAGE = `MoMo bot — your team of AI bots, ready in a few steps
+
+  momobot                         set up once, then open your workspace
+  momobot setup [--data-dir DIR]
+  momobot start [the same options as serve]
+  momobot serve [--port 8799] [--data-dir DIR] [--label NAME]
                     [--public-url https://host | --domain HOST | --tunnel | --tailscale] [--lan] [--relay]
-  openmausbot pair  [--label NAME] [--phone [ios|android]] [--ttl 24h] [--public-url https://host]
-  openmausbot devices [revoke ID]
-  openmausbot --version
-  openmausbot account login [--email you@example.com] [--relay] | logout | status
-  openmausbot access list | add EMAIL [--chat-only] | remove EMAIL
-  openmausbot service install [the same way-in options as serve] [--port N] [--data-dir DIR] | uninstall
+  momobot pair  [--label NAME] [--phone [ios|android]] [--ttl 24h] [--public-url https://host]
+  momobot devices [revoke ID]
+  momobot --version
+  momobot account login [--email you@example.com] [--relay] | logout | status
+  momobot access list | add EMAIL [--chat-only] | remove EMAIL
+  momobot service install [the same way-in options as serve] [--port N] [--data-dir DIR] | uninstall
                     [--sentinel]   (the health scan below, every two minutes, instead of the server)
-  openmausbot sentinel [--data-dir DIR] [--out DIR] [--once] [--json]   (read-only health scan; see --help)
-  openmausbot config backups | restore NAME    (dated copies of the settings file; see --help)
-  openmausbot browser install [--with-deps] | status
-  openmausbot fleet init --domain HOST [--operator USER] | create NAME --admin EMAIL [--member EMAIL] [--brand FILE]
+  momobot sentinel [--data-dir DIR] [--out DIR] [--once] [--json]   (read-only health scan; see --help)
+  momobot config backups | restore NAME    (dated copies of the settings file; see --help)
+  momobot browser install [--with-deps] | status
+  momobot fleet init --domain HOST [--operator USER] | create NAME --admin EMAIL [--member EMAIL] [--brand FILE]
                     [--anthropic-key-file FILE] [--cap USD] [--license-key KEY] [--memory 1G]
                   | list | users NAME add|remove EMAIL [--chat-only] | suspend NAME | resume NAME
                   | delete NAME --yes [--keep-data] | upgrade   (all take --dry-run)
                   | agent [--socket PATH] [--group USER]   (root; installed by init --operator)
 
 setup   choose AI access and optional phone access; keep existing bots and chats
-start   same as openmausbot: use your saved settings and open the workspace
+start   same as momobot: use your saved settings and open the workspace
 serve   starts the server without prompts; in a terminal it prints a pairing
         code, the link to paste into the desktop app (＋ → Connect to a
         server) and a QR for a phone
@@ -76,7 +80,7 @@ pair    a new pairing code for the running server, with its link and QR
         (--phone: chat and approvals only; --ttl keeps it open up to 24h,
         still single use)
 devices lists paired devices; "devices revoke ID" signs one out
-account login signs this machine in to an OpenMausBot account (an emailed
+account login signs this machine in to a MoMo bot account (an emailed
         code) and reserves its public address for --tunnel; with --relay it
         reserves none, for serve --relay. account logout releases that
         address and signs out. account status: the running server, the
@@ -86,8 +90,8 @@ access  who may sign in with an emailed code at /pair: an address or
         Takes effect at once, no restart.
 service keep the server running across reboots: writes a systemd unit
         (Linux) or a launchd agent (macOS) for the same serve options and
-        prints the commands that install it. Run from npx, it first
-        installs a copy of this version next to your data for the service.
+        prints the commands that install it. Use a permanent installation
+        from a local tarball; npm may remove its npx cache at any time.
 browser install: the bots' browser engine (agent-browser, pinned) into the
         data dir, and Chrome for Testing into the user's browser cache.
         --with-deps also installs
@@ -114,16 +118,16 @@ Ways in (pick one; --lan can join any):
              when serve stops
 --tunnel     serve at a public https://c-… address through a
              Cloudflare tunnel: no domain, no proxy, no open port. Run
-             \`openmausbot account login\` once on this machine first.
+             \`momobot account login\` once on this machine first.
 --domain     serve at https://HOST on your own domain: a pinned Caddy is
              downloaded once and run alongside the server, and gets the
              certificate itself. Point the domain's DNS at this machine and
              open ports 80 and 443.
 
 --relay      phones only, and it can join any of the above except --tunnel:
-             the MausBot phone app pairs by QR through MausBot Relay,
+             a compatible phone app pairs by QR through the relay,
              end-to-end encrypted, with no address, open port or VPN. Run
-             \`openmausbot account login --relay\` once on this machine first. Not on a
+             \`momobot account login --relay\` once on this machine first. Not on a
              machine with a tunnel address: the relay stays off there.
 
 --no-open   do not open a browser window
@@ -132,6 +136,6 @@ Ways in (pick one; --lan can join any):
 
 ${HEADLESS_USAGE}
 
-Install once with \`npm install -g openmausbot\`, then type \`openmausbot\`.
-Or run without a global install: \`npx openmausbot\`. Node 24+ is required.
+Install a local release tarball with \`npm install -g ./momobot-VERSION.tgz\`, then type \`momobot\`.
+From a source checkout, run \`pnpm omb\`. Node 24+ is required.
 `;

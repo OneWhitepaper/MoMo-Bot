@@ -18,8 +18,8 @@
   "scripts": {
     "check": "pnpm types && tsc -p tsconfig.json",
     "test": "vitest run",
-    "types": "wrangler types --config wrangler.jsonc worker-configuration.d.ts",
-    "types:check": "wrangler types --check --config wrangler.jsonc worker-configuration.d.ts",
-    "dry-run": "wrangler deploy --dry-run --config wrangler.jsonc"
+    "types": "wrangler types --strict-vars=false --config wrangler.local.jsonc worker-configuration.d.ts",
+    "types:check": "wrangler types --strict-vars=false --check --config wrangler.local.jsonc worker-configuration.d.ts",
+    "dry-run": "wrangler deploy --dry-run --config wrangler.local.jsonc"
   }
 }

@@ -87,7 +87,8 @@ function encodeOpaquePng(width, height, rgba) {
   return Buffer.concat([PNG_SIGNATURE, chunk("IHDR", header), chunk("pHYs", density), chunk("IDAT", pixels), chunk("IEND", Buffer.alloc(0))]);
 }
 
-const svg = readFileSync(new URL("background.svg", import.meta.url), "utf8");
+const icon = readFileSync(new URL("../../public/momo-bot.png", import.meta.url)).toString("base64");
+const svg = readFileSync(new URL("background.svg", import.meta.url), "utf8").replace("{{MOMO_ICON}}", icon);
 for (const [scale, name] of [
   [1, "background.png"],
   [2, "background@2x.png"],

@@ -25,7 +25,7 @@ delete process.env.PI_CODING_AGENT_DIR;
 // No server in a test downloads the project's announcement cards; its tests hand the store a fake fetch.
 process.env.OMB_DISABLE_ANNOUNCEMENTS = "1";
 // Named explicitly although homedir() already covers it: the device tests delete this directory wholesale.
-process.env.OMB_COMPANION_DIR = join(home, ".openmausbot-companion");
+process.env.OMB_COMPANION_DIR = join(home, ".momobot-companion");
 
 // Product code follows navigator.language; pin it so English assertions do not depend on the host locale.
 Object.defineProperty(globalThis.navigator, "language", { value: "en", configurable: true });

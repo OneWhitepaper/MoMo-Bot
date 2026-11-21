@@ -341,6 +341,7 @@ const readTree = (path: string) => (existsSync(path) ? readFileSync(path, "utf8"
 
 /** English on purpose: what reaches a line here is not words a person reads in it. */
 const ALLOWED: ReadonlyArray<{ file: string; snippet: string; why: string }> = [
+  { file: "packages/phone-protocol/src/product-brand.ts", snippet: "MoMo bot", why: "the product name is identical in every language" },
   { file: "server/host/helper-suggestion.ts", snippet: "Want me to sort your email for free?", why: "the app draws this suggestion in its own words (setupSuggestion)" },
   { file: "shared/client-cancel.ts", snippet: "You stopped this.", why: "a stopped turn's marker: the app says it in the reader's language (chat.turnStopped)" },
 ];
@@ -387,7 +388,7 @@ const PENDING: Readonly<Record<string, ReadonlyArray<readonly [file: string, sni
     ["server/routine-requests.ts", "Queue one scheduled run; skip further occurrences until it starts"],
     ["server/routine-requests.ts", "Skip overlapping scheduled occurrences"],
     ["server/routine-requests.ts", "On startup:  …"],
-    ["server/routine-requests.ts", "Also runs once each time OpenMausBot starts"],
+    ["server/routine-requests.ts", "Also runs once each time  …  starts"],
     ["server/routine-requests.ts", "Runs only on its schedule"],
     ["server/webhook-requests.ts", "When another app sends something … ,  …   …"],
     ["server/webhook-requests.ts", "does what it is asked"],

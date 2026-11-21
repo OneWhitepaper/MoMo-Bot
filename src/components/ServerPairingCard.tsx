@@ -223,8 +223,8 @@ export function ServerPairingCard({ initialSession = null, initialPairingCodes =
               {/* One 14/20 ink instruction, then 12/16 secondary notes. */}
               <div className="flex flex-col gap-1" data-pair-instructions="">
                 {forComputer ? <p className="text-[14px] leading-5 text-ink">{t("devices.computers.typeCode", { app: productName() })}</p> : offer.url ? <>
-                  <p className="text-[14px] leading-5 text-ink">{t("phone.code.installAndScan", { app: productName() })}</p>
-                  <p className="text-[12px] leading-4 text-ink-secondary">{t("phone.code.notCamera", { app: productName() })}</p>
+                  <p className="text-[14px] leading-5 text-ink">{t("phone.code.installAndScan")}</p>
+                  <p className="text-[12px] leading-4 text-ink-secondary">{t("phone.code.notCamera")}</p>
                 </> : <p className="text-[14px] leading-5 text-ink">{t("phone.code.typeThis", { app: productName() })}</p>}
               </div>
               {forOtherComputer && (

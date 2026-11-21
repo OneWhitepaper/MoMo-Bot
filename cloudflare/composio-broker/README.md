@@ -1,4 +1,4 @@
-# OpenMausBot connected-apps broker
+# MoMo bot connected-apps broker
 
 This Worker keeps the shared Composio project key out of desktop builds. Each
 installation receives a random bearer token stored only as a SHA-256 hash in
@@ -8,20 +8,45 @@ MCP traffic, and returns short-lived Connect Links to the local app.
 The desktop never receives the project key. Authorization links are returned
 only on demand and are never persisted in chat messages.
 
-Deployment for this repository:
+## Local checks
 
-1. `pnpm broker:types`
-2. `pnpm exec wrangler d1 migrations apply openmausbot-composio --remote --config cloudflare/composio-broker/wrangler.jsonc`
-3. For an existing Worker, run `pnpm exec wrangler secret put COMPOSIO_API_KEY --config cloudflare/composio-broker/wrangler.jsonc`, then `pnpm broker:deploy`.
-4. For the very first deploy, put `COMPOSIO_API_KEY=...` in the ignored `.dev.vars.production` file and run `pnpm exec wrangler deploy --config cloudflare/composio-broker/wrangler.jsonc --secrets-file .dev.vars.production`. Delete the file immediately afterward.
+Run from the repository root:
 
-Forks should create their own D1 database and rate-limit namespaces, replace
-the IDs in `wrangler.jsonc`, deploy under their own Worker name, and set
-`OMB_COMPOSIO_BROKER_URL` in their packaged build. Running only the local
-server with a Composio project key remains the no-Cloudflare self-host path.
+```sh
+pnpm broker:check
+pnpm broker:test
+pnpm broker:dry-run
+```
 
-Set `REGISTRATION_MODE` to `closed` to stop issuing new installation tokens
-without affecting existing users.
+`wrangler.local.jsonc` uses a placeholder D1 binding and has registration
+closed. It sets no public route and is used only for local work.
+
+## Operator deployment
+
+Copy `cloudflare/composio-broker/wrangler.local.jsonc` to the ignored
+`cloudflare/composio-broker/wrangler.production.jsonc`. Set the Worker name,
+`account_id`, and D1 database name and ID from your Cloudflare account. Choose
+three rate-limit namespace IDs for that account and configure a hostname
+under `routes` (or turn on `workers_dev` for your own account). To run the
+hourly app-event cleanup, add `"triggers": { "crons": ["23 * * * *"] }`.
+Set `REGISTRATION_MODE` to `open` when ready to issue installation tokens;
+`closed` lets existing users continue.
+
+Run the following from the repository root after filling in the config:
+
+```sh
+pnpm exec wrangler deploy --dry-run --config cloudflare/composio-broker/wrangler.production.jsonc
+pnpm exec wrangler d1 migrations apply DB --remote --config cloudflare/composio-broker/wrangler.production.jsonc
+pnpm broker:deploy --secrets-file .dev.vars.production
+```
+
+For the first deployment, the ignored `.dev.vars.production` file must contain
+your `COMPOSIO_API_KEY`. Remove the file after a successful deployment. For an
+existing Worker, update the key with `pnpm exec wrangler secret put
+COMPOSIO_API_KEY --config cloudflare/composio-broker/wrangler.production.jsonc`
+and run `pnpm broker:deploy`. Set `OMB_COMPOSIO_BROKER_URL` for the app/server
+when your broker is ready. If you only need local connected apps, provide your
+own Composio project key without running this Worker.
 
 ## App events (Composio triggers)
 
@@ -130,9 +155,8 @@ changes nothing.
 
 1. Apply the migration before deploying the code (the old code ignores the
    new tables and columns):
-   `pnpm exec wrangler d1 migrations apply openmausbot-composio --remote --config cloudflare/composio-broker/wrangler.jsonc`
-2. Deploy as usual (`wrangler versions upload --preview-alias <name>`, check,
-   then `wrangler versions deploy`). Until step 4 the webhook route answers
+   `pnpm exec wrangler d1 migrations apply DB --remote --config cloudflare/composio-broker/wrangler.production.jsonc`
+2. Deploy with `pnpm broker:deploy`. Until step 4 the webhook route answers
    503 and no client calls the new routes.
 3. Create the project's webhook subscription. Composio allows one per
    project; check that there is none, then create it and copy the returned
@@ -142,30 +166,24 @@ changes nothing.
    curl -sS https://backend.composio.dev/api/v3.1/webhook_subscriptions -H "x-api-key: $COMPOSIO_API_KEY"
    curl -sS -X POST https://backend.composio.dev/api/v3.1/webhook_subscriptions \
      -H "x-api-key: $COMPOSIO_API_KEY" -H "content-type: application/json" \
-     -d '{"webhook_url":"https://openmausbot-composio.milindsoni201.workers.dev/v1/composio/webhook","enabled_events":["composio.trigger.message","composio.trigger.disabled","composio.connected_account.expired"],"version":"V3"}'
+     -d '{"webhook_url":"https://broker.example.com/v1/composio/webhook","enabled_events":["composio.trigger.message","composio.trigger.disabled","composio.connected_account.expired"],"version":"V3"}'
    ```
 
    If Composio refuses `composio.trigger.disabled`, leave it out: the server's
    reconciliation still sees a disabled trigger through `GET /v1/triggers`.
-4. `pnpm exec wrangler secret put COMPOSIO_WEBHOOK_SECRET --config cloudflare/composio-broker/wrangler.jsonc`
-   with that secret.
-5. Optional, each with `wrangler secret put` and a fresh random value
+4. `pnpm exec wrangler secret put COMPOSIO_WEBHOOK_SECRET --config cloudflare/composio-broker/wrangler.production.jsonc`
+   with the signing secret. Add its name to `secrets.required` in the production
+   config so subsequent deploys keep it.
+5. Optional, each with `wrangler secret put` with the same `--config` and a fresh random value
    (`openssl rand -base64 32`): `CLOUD_GRANT_SECRET` (shared with the Cloud
    Admin, which mints the grants) and `STATS_TOKEN` (given to Admin for the
    fleet counter). Without them, `PUT /v1/installation/cloud` answers 503 and
-   the stats route 404.
-6. Waking sleeping Clouds (at launch of a plan that sleeps): apply migration
-   `0003_cloud_wake.sql` (step 1) before deploying the code that uses it, then
-   set `CLOUD_ADMIN_URL` to the Cloud Admin's origin
-   (`https://cloud.openmausbot.com`). Either add it to `vars` in
-   `wrangler.jsonc` in a PR, or `wrangler secret put CLOUD_ADMIN_URL`: a
-   deploy replaces variables set in the dashboard, but keeps secrets. Without
-   it (or without `CLOUD_GRANT_SECRET`) the broker never asks the Admin to wake
-   anything.
-7. Idle sweep progress: apply migration `0005_trigger_sweep_progress.sql`
-   (step 1) before the code that uses it reaches `main`, because CI deploys
-   every push to `main`. Without it, the hourly sweep of idle installations
-   fails after it has expired old events.
+   the stats route 404. Add any of these secrets you set to `secrets.required`
+   in the production config.
+6. To enable waking sleeping Clouds, apply `0003_cloud_wake.sql` first and set
+   `CLOUD_ADMIN_URL` in the production config's `vars` to your own Cloud Admin
+   origin. The broker needs both this URL and `CLOUD_GRANT_SECRET` to request a wake.
+7. Apply `0005_trigger_sweep_progress.sql` before enabling the hourly sweep.
 
 ## Erasing an installation and what the broker keeps
 

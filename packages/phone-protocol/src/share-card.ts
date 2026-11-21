@@ -31,9 +31,11 @@ export interface TemplateCard {
   prUrl?: string;
   /** The last publish's one-line error. */
   error?: string;
-  /** Publishing can't happen from here: no MausBot account is signed in, or the community service isn't offered. The card
-   * offers Save folder… and the community repository's upload page instead of Publish. */
+  /** Publishing can't happen from here: no MoMo bot account is signed in, or the community service isn't offered. The card
+   * offers Save folder… instead of Publish. */
   fallback?: "sign_in" | "unavailable";
+  /** The configured community repository's upload page. */
+  uploadUrl?: string;
 }
 
 /** What a template brings, for its Details sheet and for Import's preview. Everything here is text the folder carries. */
@@ -83,10 +85,6 @@ export interface TemplateRepoPublish {
   link: string;
   branch: string;
 }
-
-/** The community repository a published template lands in, and the page anyone can upload a folder through. */
-export const COMMUNITY_REPOSITORY_URL = "https://github.com/milind-soni/openmausbot-teams";
-export const COMMUNITY_UPLOAD_URL = `${COMMUNITY_REPOSITORY_URL}/upload/main/teams`;
 
 /** The chat message the bot's Share button sends, and the one Update sends. */
 export const TEMPLATE_SHARE_MESSAGE = "Create a public template of yourself that I can share with somebody else";

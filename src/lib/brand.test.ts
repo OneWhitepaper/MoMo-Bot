@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { accentInk, applyBrand, bootstrapBrand, brand, brandVars, DEFAULT_BRAND, iconType, luminance, PRODUCT_NAME, productName } from "./brand";
+import { accentInk, applyBrand, bootstrapBrand, brand, brandVars, DEFAULT_BRAND, iconType, luminance, PRODUCT_LOGO, PRODUCT_NAME, productLogo, productName } from "./brand";
 
 describe("brand", () => {
   it("derives readable ink for light and dark accents", () => {
@@ -39,12 +39,14 @@ describe("brand", () => {
     expect(brand()).toEqual(DEFAULT_BRAND);
   });
 
-  it("names the product MausBot, or a white-label brand file by its own name", () => {
+  it("names the product MoMo bot, or a white-label brand file by its own name", () => {
     applyBrand({ brand: DEFAULT_BRAND, source: "default", file: "" });
-    expect(productName()).toBe("MausBot");
-    expect(brand().name).toBe("OpenMausBot");
-    applyBrand({ brand: { name: "Acme Bots" }, source: "file", file: "/data/brand.json" });
+    expect(productName()).toBe("MoMo bot");
+    expect(brand().name).toBe("MoMo bot");
+    expect(productLogo()).toBe(PRODUCT_LOGO);
+    applyBrand({ brand: { name: "Acme Bots", logo: "data:image/png;base64,AAAA" }, source: "file", file: "/data/brand.json" });
     expect(productName()).toBe("Acme Bots");
+    expect(productLogo()).toBe("data:image/png;base64,AAAA");
     applyBrand({ brand: DEFAULT_BRAND, source: "default", file: "" });
   });
 

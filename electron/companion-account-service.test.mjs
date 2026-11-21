@@ -113,23 +113,18 @@ function signedCredentials(overrides = {}) {
 }
 
 describe("Companion account service", () => {
-  it("uses the packaged hosted default and only explicit safe development origins", () => {
-    expect(resolveCompanionControlPlaneURL({ isPackaged: true, environment: {} })).toBe(
-      "https://accounts.openmausbot.com",
-    );
+  it("only uses an explicitly configured safe origin", () => {
+    expect(resolveCompanionControlPlaneURL({ environment: {} })).toBe("");
     expect(resolveCompanionControlPlaneURL({
-      isPackaged: false,
       environment: { OMB_CONTROL_PLANE_URL: "http://127.0.0.1:8787/" },
     })).toBe("http://127.0.0.1:8787");
     expect(resolveCompanionControlPlaneURL({
-      isPackaged: true,
       environment: { OMB_CONTROL_PLANE_URL: "http://accounts.openmausbot.com" },
     })).toBe("");
     expect(resolveCompanionControlPlaneURL({
-      isPackaged: true,
       environment: { OMB_CONTROL_PLANE_URL: new String("https://accounts.openmausbot.com") },
     })).toBe("");
-    expect(resolveCompanionControlPlaneURL({ isPackaged: false, environment: {} })).toBe("");
+    expect(resolveCompanionControlPlaneURL({ environment: {} })).toBe("");
   });
 
   it("does not coerce boxed credential fields into an account", async () => {
@@ -1523,7 +1518,7 @@ describe("Companion account on demand", () => {
 
   it("tells a desktop below the minimum version to update", async () => {
     const message = friendlyCompanionAccountError(new ControlPlaneError("update_required", 426));
-    expect(message).toBe("This version of MausBot can no longer make secure links. Update MausBot, then try again. Local Wi-Fi and Tailscale pairing still work.");
+    expect(message).toBe("This version of MoMo bot can no longer make secure links. Update MoMo bot, then try again. Local Wi-Fi and Tailscale pairing still work.");
   });
 
   it("signs a relay-capable computer in without a tunnel when no phone needs one", async () => {

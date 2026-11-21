@@ -50,8 +50,9 @@ describe("Windows owned CUA host", () => {
     await expect(cua.startCua()).resolves.toMatchObject({
       mode: "embedded", ...connection,
       mcpArgs: ["mcp", "--embedded", "--socket", connection.socketPath],
-      mcpEnv: { CUA_DRIVER_EMBEDDED: "1", CUA_DRIVER_RS_TELEMETRY_ENABLED: "0" },
+      mcpEnv: { CUA_DRIVER_EMBEDDED: "1", CUA_DRIVER_RS_TELEMETRY_ENABLED: "0", CUA_DRIVER_RS_UPDATE_CHECK: "false" },
     });
+    expect(fixture.hosts[0].options.environment).toContainEqual({ name: "CUA_DRIVER_RS_UPDATE_CHECK", value: "false" });
     expect(fixture.start.mock.calls[0][0].signal).toBeInstanceOf(AbortSignal);
     expect(fixture.hosts[0].binary).toBe(process.env.CUA_DRIVER_PATH);
     await cua.stopCua();

@@ -4,10 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import vm from "node:vm";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cloudTarget } from "./cloud-account.mjs";
-import { myCloudOrigin, rememberedCloudHome, savedCloudHomeOrigin } from "./cloud-home.mjs";
+import { myCloudOrigin } from "./cloud-home.mjs";
 import { cloudPageSenderAllowed } from "./cloud-home.mjs";
-import { otherOwnClouds, ownCloud } from "./cloud-list.mjs";
+import { otherOwnClouds } from "./cloud-list.mjs";
 import environments from "./environments.cjs";
 import localOriginModule from "./local-origin.cjs";
 
@@ -39,37 +38,17 @@ function mainRule() {
   expect(start).toBeGreaterThanOrEqual(0);
   expect(end).toBeGreaterThan(start);
   expect(source.includes("registerUpdaterIpc({ pageAllowed: updaterPageAllowed, serverPage: event => activePageOrigin(event), confirmRestart: "), "main.mjs wires the updater to updaterPageAllowed").toBe(true);
-  const signInStart = source.indexOf("function ensureCloudAccount() {"), signInEnd = source.indexOf("\n}\n", signInStart) + 3;
-  expect(signInStart).toBeGreaterThanOrEqual(0);
   const window = { isDestroyed: () => false, webContents: null };
-  const listeners = new Map();
-  const signIn = { options: null, state: { status: "signed-out", message: "restoring" } };
-  // The bot link hears every change of the sign-in (bot-link-main.mjs ends a link whose account or Cloud changed).
-  const botLink = { look: vi.fn(async () => {}) };
   const context = vm.createContext({
-    ipcMain: { handle: () => {}, on: (channel, listener) => listeners.set(channel, listener) },
+    ipcMain: { handle: () => {} }, installCloudPlanIpc: () => {},
     senderIsLocal: localOriginModule.isLocalSender, workspaceSenderAllowed: environments.workspaceSenderAllowed, cloudPageSenderAllowed, myCloudOrigin, otherOwnClouds,
     activeEnvironment: environments.activeEnvironment, rendererOrigin: () => LOCAL, desktopRemoteAccess: false,
     mainWindow: window,
     environmentsState: { environments: [], activeId: environments.LOCAL_ID },
     cloudAccount: { homeTarget: () => ({ origin: CLOUD }), state: () => ({ status: "connected", account: { id: "a1" } }), isOwnCloud: () => false },
-    rememberedHome: null, savedCloudHomeOrigin, cloudSignInRestored: true,
-    // ensureCloudAccount's world: a packaged app, and a sign-in client whose state the test sets.
-    app: { isPackaged: true, getPath: () => "/unused", getVersion: () => "1.0.0" }, process: { platform: "darwin", env: {} }, cloudTarget,
-    path: { join: (...parts) => parts.join("/") }, os: { hostname: () => "mac" }, shell: {}, safeStorage: {},
-    createCloudAccountStore: () => ({}), cloudEncryption: {}, cloudAccountStore: () => ({}), cloudSync: { accountChanged: () => {} }, accounts: { tell: () => {} }, rememberCloudHome: () => {}, rememberedCloudHome, computerSharing: null, updatesConsent: null, botLink,
-    sendUpdaterState: () => {}, refreshCloudMenus: () => {}, announceCloudReady: () => {}, installCloudPlanIpc: () => {}, slog: () => {},
-    includedX: { onState: async () => {} }, includedPages: { onState: async () => {} }, cloudPower: { changed: () => {}, awaiting: () => false }, cloudLogins: { kick: () => {} },
-    createCloudAccountClient: (options) => {
-      signIn.options = options;
-      return {
-        homeTarget: () => (signIn.state.status === "connected" ? { origin: signIn.state.machine.origin } : null),
-        state: () => signIn.state,
-        isOwnCloud: (origin) => signIn.state.status === "connected" && (signIn.state.clouds ?? []).some(cloud => ownCloud(cloud) && cloud.origin === origin),
-      };
-    },
+    rememberedHome: null,
   });
-  vm.runInContext(`${source.slice(start, end)}\n${source.slice(signInStart, signInEnd)}`, context);
+  vm.runInContext(source.slice(start, end), context);
   const show = (shown, activeId = environments.LOCAL_ID) => {
     window.webContents = shown.webContents;
     context.environmentsState = {
@@ -78,22 +57,7 @@ function mainRule() {
       activeId,
     };
   };
-  const offered = (event) => {
-    const asked = { ...event };
-    listeners.get("update:offered")(asked);
-    return asked.returnValue;
-  };
-  const launching = () => {
-    context.cloudAccount = null;
-    context.cloudSignInRestored = false;
-    vm.runInContext("ensureCloudAccount()", context);
-  };
-  const signedIn = (state) => {
-    signIn.state = state;
-    context.cloudSignInRestored = true;
-    signIn.options.onState(state);
-  };
-  return { context, window, show, offered, launching, signedIn, botLink, pageAllowed: vm.runInContext("updaterPageAllowed", context), serverPage: (event) => vm.runInContext("activePageOrigin", context)(event) ?? null };
+  return { context, window, show, pageAllowed: vm.runInContext("updaterPageAllowed", context), serverPage: (event) => vm.runInContext("activePageOrigin", context)(event) ?? null };
 }
 
 async function load(pageAllowed, serverPage = undefined, confirmRestart = undefined) {
@@ -132,92 +96,19 @@ afterEach(() => {
   rmSync(fixture.home, { recursive: true, force: true });
 });
 
-function bridgeFor(origin, { clicked = false, rule = null } = {}) {
-  let bridge;
-  const invoked = [];
-  const asked = [];
-  const loading = page(origin);
-  if (rule) rule.window.webContents = loading.webContents;
-  vm.runInNewContext(readFileSync(new URL("./preload.cjs", import.meta.url), "utf8"), {
-    process: { platform: "darwin", argv: [`--omb-local-origin=${LOCAL}`] },
-    location: { origin }, navigator: { userActivation: { isActive: clicked } },
-    TextEncoder, localStorage: { getItem: () => null },
-    require: () => ({
-      webUtils: {},
-      contextBridge: { exposeInMainWorld: (_name, value) => { bridge = value; } },
-      ipcRenderer: {
-        on() {}, removeListener() {}, send() {},
-        sendSync: (channel) => { asked.push(channel); return rule ? rule.offered(loading.event) : undefined; },
-        invoke: (...args) => { invoked.push(args); return Promise.resolve({ status: "idle" }); },
-      },
-    }),
-  });
-  return { bridge, invoked, asked };
-}
-
-it("My Cloud's page gets the update bridge, and it restarts the app only on the person's click", async () => {
-  const local = bridgeFor(LOCAL);
-  expect(Object.keys(local.bridge.updater).sort()).toEqual(["check", "install", "onState", "seen"]);
-  expect(local.asked, "this computer's page has the whole bridge without asking").toEqual([]);
-  await local.bridge.updater.install();
-  expect(local.invoked).toEqual([["update:install"]]);
-
-  const rule = mainRule();
-  rule.show(page(CLOUD), "cloud");
-  const cloud = bridgeFor(CLOUD, { rule });
-  expect(Object.keys(cloud.bridge.updater).sort()).toEqual(["check", "install", "onState", "seen"]);
-  await expect(cloud.bridge.updater.install()).rejects.toThrow(/Restart to update/);
-  await cloud.bridge.updater.check();
-  cloud.bridge.updater.onState(() => {});
-  expect(cloud.invoked).toEqual([["update:check"], ["update:get-state"]]);
-  const clicked = bridgeFor(CLOUD, { clicked: true, rule });
-  await clicked.bridge.updater.install();
-  expect(clicked.invoked).toEqual([["update:install"]]);
-});
-
-it("another server's page never gets the update bridge; My Cloud's does, even while the sign-in restores", () => {
-  const rule = mainRule();
-  const has = (origin, activeId) => {
-    rule.show(page(origin), activeId);
-    return "updater" in bridgeFor(origin, { rule }).bridge;
-  };
-  expect(has(OTHER, "vps")).toBe(false);
-  expect(has(CLOUD, "cloud")).toBe(true);
-  rule.show(page(CLOUD), "cloud");
-  expect(rule.offered({ sender: rule.window.webContents, senderFrame: { url: `${CLOUD}/` } })).toBe(false);
-
-  rule.launching();
-  expect(has(CLOUD, "cloud")).toBe(true);
-  expect(has(OTHER, "vps")).toBe(false);
-
-  rule.signedIn({ status: "signed-out" });
-  expect(has(CLOUD, "cloud")).toBe(false);
-  expect(rule.botLink.look, "a change of the sign-in is told to the bot link").toHaveBeenCalledTimes(1);
-
-  rule.signedIn({ status: "connected", account: { id: "a1" }, machine: { origin: CLOUD, status: "ready" } });
-  expect(has(CLOUD, "cloud")).toBe(true);
-  rule.context.desktopRemoteAccess = { endpoint: "https://companion.example.test" };
-  expect(has(CLOUD, "cloud")).toBe(false);
-  rule.context.cloudSignInRestored = false;
-  expect(has(CLOUD, "cloud")).toBe(false);
-
-  expect("updater" in bridgeFor(CLOUD).bridge).toBe(false);
-});
-
-it("another Cloud of the person's own gets the update bridge as My Cloud's page does; a server only signed in with their account does not", () => {
-  const rule = mainRule();
-  const has = (origin, activeId) => {
-    rule.show(page(origin), activeId);
-    return "updater" in bridgeFor(origin, { rule }).bridge;
-  };
-  rule.show(page(CLOUD), "cloud");
-  rule.launching();
-  const cloud = (over) => ({ id: "c-a", name: "Client A", color: null, role: "owner", tier: "pro", runsOn: "cloud", status: "ready", origin: OWN, teamId: null, primary: false, managed: true, ...over });
-  rule.signedIn({ status: "connected", account: { id: "a1" }, machine: { origin: CLOUD, status: "ready" }, clouds: [cloud({ id: "c-home", origin: CLOUD, primary: true }), cloud()] });
-  expect(has(OWN, "own")).toBe(true);
-  expect(has(OTHER, "vps")).toBe(false);
-  rule.signedIn({ status: "connected", account: { id: "a1" }, machine: { origin: CLOUD, status: "ready" }, clouds: [cloud({ id: "c-home", origin: CLOUD, primary: true }), cloud({ runsOn: "server", managed: false })] });
-  expect(has(OWN, "own")).toBe(false);
+it("MoMo bot exposes no auto updater to the local page or any connected server", () => {
+  const source = readFileSync(new URL("./preload.cjs", import.meta.url), "utf8");
+  for (const origin of [LOCAL, CLOUD, OTHER]) {
+    let bridge;
+    vm.runInNewContext(source, {
+      process: { platform: "darwin", argv: [`--omb-local-origin=${LOCAL}`, "--momo-cloud=1"] },
+      location: { origin }, TextEncoder, localStorage: { getItem: () => null },
+      require: () => ({ webUtils: {}, contextBridge: { exposeInMainWorld: (_name, value) => { bridge = value; } },
+        ipcRenderer: { on() {}, send() {}, sendSync: () => true } }),
+    });
+    expect(bridge.updater, origin).toBeUndefined();
+    expect(bridge.appUpdate, origin).toBeUndefined();
+  }
 });
 
 it("a downloaded update installs when the app quits, except a system package, which is the person's to install", async () => {
@@ -292,34 +183,17 @@ it("a downloaded update installs by itself at a quiet moment on macOS and Window
   }
 });
 
-it("My Cloud's page hears \"Restart to update\" once the sign-in it loaded before is restored", async () => {
-  const rule = mainRule();
-  rule.launching();
-  const { updater, autoUpdater, handlers } = await load(rule.pageAllowed);
-  rule.context.sendUpdaterState = updater.sendUpdaterState;
-  const cloud = page(CLOUD);
-  rule.show(cloud, "cloud");
-  updater.attachUpdaterWindow(rule.window);
-  updater.startUpdater();
-
-  await vi.advanceTimersByTimeAsync(15_000);
-  await settle();
-  expect(autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1);
-  expect(() => handlers.get("update:get-state")(cloud.event)).toThrow(/only available/);
-  expect(cloud.webContents.send).not.toHaveBeenCalled();
-  await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
-  // The staged 2.0.0 is still offered, so the hourly check looks again (quietly) for something newer; macOS stages
-  // natively and is not re-checked.
-  expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(process.platform === "darwin" ? 1 : 2);
-  expect(cloud.webContents.send).not.toHaveBeenCalled();
-
-  rule.signedIn({ status: "connected", account: { id: "a1" }, machine: { origin: CLOUD, status: "ready" } });
-  expect(cloud.webContents.send).toHaveBeenLastCalledWith("update:state", expect.objectContaining({ status: "downloaded", version: "2.0.0" }));
-
-  const other = page(OTHER);
-  rule.show(other, "vps");
-  rule.signedIn({ status: "connected", account: { id: "a1" }, machine: { origin: CLOUD, status: "ready" } });
-  expect(other.webContents.send).not.toHaveBeenCalled();
+it("packaged IPC has no running updater even when asked directly", async () => {
+  const rule = mainRule(), local = page(LOCAL), server = page(OTHER);
+  const { handlers, autoUpdater } = await load(rule.pageAllowed, rule.serverPage);
+  rule.show(local);
+  await handlers.get("update:check")(local.event);
+  await handlers.get("update:install")(local.event);
+  rule.show(server, "vps");
+  expect(await handlers.get("update:for-server-page")(server.event)).toBe("unavailable");
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
+  expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled();
 });
 
 it("downloads an update by itself: the first check after launch starts it, and nothing restarts", async () => {

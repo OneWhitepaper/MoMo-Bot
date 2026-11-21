@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUpRight, X } from "lucide-react";
-import { CLOUD_PLAN_URL } from "@/lib/app-links";
+import { configuredCloudPage } from "@/lib/app-links";
 import { botRoom, closeBotLimit, planRefusal, showBotLimit, useBotLimitReason, useCreatedPausedBot, type BotLimitReason } from "@/lib/bot-limit";
 import { cloudPlanLabel } from "@/lib/cloud-plan";
 import { cn } from "@/lib/cn";
@@ -34,6 +34,7 @@ export function BotLimitPopup() {
 
 function BotLimitDialog({ reason, created, onClose }: { reason: BotLimitReason; created: string | null; onClose: () => void }) {
   const { state } = useStore();
+  const planUrl = state.config?.team?.cloudPage ?? configuredCloudPage();
   const bridge = usageBridge(state.config?.cloudHome === true);
   const plan = useCloudPlanSnapshot(bridge);
   const usage = plan?.status === "paid" ? plan.usage ?? null : null;
@@ -91,7 +92,7 @@ function BotLimitDialog({ reason, created, onClose }: { reason: BotLimitReason; 
           className="ui-modal animate-pop-in relative flex w-[min(380px,calc(100vw-32px))] flex-col items-center border-0 px-6 pb-3 pt-8 text-center text-ink motion-reduce:animate-none">
           <div aria-hidden="true"><MausAvatar color="chrome" size={52} state="idle" animated={false} /></div>
           <h2 id={TITLE} className="mt-5 text-[19px] font-semibold leading-6 tracking-[-0.012em] [text-wrap:balance]">{title}</h2>
-          {!settled && <p id={BODY} className="mt-1.5 text-[14px] leading-5 text-ink-secondary [text-wrap:pretty]">{body ?? t(inApp ? "botLimit.body" : "botLimit.bodyElsewhere")}</p>}
+          {!settled && <p id={BODY} className="mt-1.5 text-[14px] leading-5 text-ink-secondary [text-wrap:pretty]">{body ?? t(inApp ? "botLimit.body" : planUrl || bridge ? "botLimit.bodyElsewhere" : "botLimit.bodyNoPlan")}</p>}
           {picking && <AwakeBotsPicker limit={awake} onSaved={onClose} {...(reason === "created" && created ? { swapIn: created } : {})} />}
           {settled ? (
             <button type="button" onClick={onClose} className={cn(PRIMARY_BUTTON, "mt-5 w-full justify-center")}>{t("roomCard.gotIt")}</button>
@@ -99,8 +100,8 @@ function BotLimitDialog({ reason, created, onClose }: { reason: BotLimitReason; 
             <div className="mt-5 w-full">
               <UpgradeButton usage={usage} upgrade={{ busy: upgrade.busy, note: upgrade.note, onUpgrade: upgrade.start }} className="w-full justify-center" />
             </div>
-          ) : !bridge ? (
-            <div className="mt-5 w-full [&>div]:w-full"><LinkButton url={CLOUD_PLAN_URL} label={t("botLimit.openPlan")} className={cn(PRIMARY_BUTTON, "w-full justify-center")} /></div>
+          ) : !bridge ? planUrl && (
+            <div className="mt-5 w-full [&>div]:w-full"><LinkButton url={planUrl} label={t("botLimit.openPlan")} className={cn(PRIMARY_BUTTON, "w-full justify-center")} /></div>
           ) : plan !== null ? (
             <button type="button" className={cn(PRIMARY_BUTTON, "mt-5 w-full justify-center")} onClick={() => { setPlanFailed(false); void bridge.manage().then(onClose, () => setPlanFailed(true)); }}>
               {t("botLimit.openPlan")}<ArrowUpRight size={14} aria-hidden="true" />

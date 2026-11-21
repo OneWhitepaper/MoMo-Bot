@@ -2,11 +2,13 @@
 // isn't available asks once with a card: what it wants and why, why it isn't available, and the one-tap fix. The English
 // mirrors src/locales/en.json `computerAsk.*` exactly (a test holds them together): the server has no i18n.
 
+import { PRODUCT_NAME, PRODUCT_REPOSITORY_URL } from "./product-brand.ts";
+
 /** The card's tool name: no engine has a tool by this name, and "Always allow" is never offered for it. */
 export const COMPUTER_ASK_TOOL = "turn_on_your_computer";
 /** The bots' tool that raises the card. */
 export const ASK_FOR_COMPUTER_TOOL = "ask_for_computer";
-export const DESKTOP_DOWNLOAD_URL = "https://www.openmausbot.com/download";
+export const DESKTOP_DOWNLOAD_URL = `${PRODUCT_REPOSITORY_URL}/releases`;
 
 export const COMPUTER_NEEDS = ["screen", "folders", "terminal"] as const;
 export type ComputerNeed = (typeof COMPUTER_NEEDS)[number];
@@ -84,7 +86,7 @@ export const COMPUTER_ASK_WORDS = {
 export type ComputerAskKey = keyof typeof COMPUTER_ASK_WORDS;
 
 /** The product's name as the person reads it, as the app fills `{app}`. */
-export const COMPUTER_ASK_APP = "MausBot";
+export const COMPUTER_ASK_APP = PRODUCT_NAME;
 
 export function computerAskText(key: ComputerAskKey, params: Record<string, string>): string {
   return COMPUTER_ASK_WORDS[key].replace(/\{(\w+)\}/g, (whole, name: string) => (name === "app" ? params.app ?? COMPUTER_ASK_APP : params[name] ?? whole));

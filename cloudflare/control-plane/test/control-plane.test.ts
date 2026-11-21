@@ -8,7 +8,7 @@ import { buildOTPEmail, sendOTPEmail } from "../src/email";
 import worker from "../src/index";
 import { sha256 } from "../src/installations";
 
-const BASE_URL = "https://auth.openmausbot.test";
+const BASE_URL = env.BETTER_AUTH_URL;
 
 interface CallOptions {
   method?: string;
@@ -221,8 +221,9 @@ describe("control-plane migrations and health", () => {
     expect(rows.results).toEqual([{ providerId: "credential", accountId: userId }]);
   });
 
-  it("ties every existing endpoint to the original account and carries its capacity state over", async () => {
+  it("retains legacy endpoints and capacity without assigning them to an account", async () => {
     const db = env.MIGRATION_DB;
+    const unassignedAccount = "0".repeat(32);
     const accounts = env.TEST_MIGRATIONS.findIndex((migration) => migration.name.startsWith("0007_"));
     expect(accounts).toBeGreaterThan(0);
     await applyD1Migrations(db, env.TEST_MIGRATIONS.slice(0, accounts));
@@ -233,7 +234,7 @@ describe("control-plane migrations and health", () => {
           (installation_id, hostname, tunnel_name, tunnel_id, dns_record_id, status,
            last_reconciled_at, created_at, updated_at)
          VALUES ('before-0007', ?, ?, '10000000-0000-4000-8000-000000000001', 'dns-1', 'ready', 5, 1, 5)`,
-      ).bind(`c-${"a".repeat(32)}.openmausbot.com`, `omb-c-${"a".repeat(32)}`),
+      ).bind(`c-${"a".repeat(32)}.momobot.test`, `omb-c-${"a".repeat(32)}`),
       db.prepare(
         `UPDATE managed_endpoint_capacity
             SET scan_page = 7, tunnel_count = 1000, dns_record_count = 990, reclaim_pending = 3,
@@ -248,18 +249,18 @@ describe("control-plane migrations and health", () => {
     expect(await db.prepare(
       "SELECT provider_account, hostname, status FROM installation_endpoints WHERE installation_id = 'before-0007'",
     ).first()).toEqual({
-      provider_account: env.CLOUDFLARE_ACCOUNT_ID,
-      hostname: `c-${"a".repeat(32)}.openmausbot.com`,
+      provider_account: unassignedAccount,
+      hostname: `c-${"a".repeat(32)}.momobot.test`,
       status: "ready",
     });
-    // A Worker that predates the column keeps inserting into the same account.
+    // Older Workers cannot assign new rows to a configured account.
     await db.prepare(
       `INSERT INTO installation_endpoints (installation_id, hostname, tunnel_name, status, created_at, updated_at)
        VALUES ('older-worker', ?, ?, 'pending', 1, 1)`,
-    ).bind(`c-${"b".repeat(32)}.openmausbot.com`, `omb-c-${"b".repeat(32)}`).run();
+    ).bind(`c-${"b".repeat(32)}.momobot.test`, `omb-c-${"b".repeat(32)}`).run();
     expect(await db.prepare(
       "SELECT provider_account FROM installation_endpoints WHERE installation_id = 'older-worker'",
-    ).first()).toEqual({ provider_account: env.CLOUDFLARE_ACCOUNT_ID });
+    ).first()).toEqual({ provider_account: unassignedAccount });
     await expect(db.prepare(
       `INSERT INTO installation_endpoints
         (installation_id, provider_account, hostname, tunnel_name, status, created_at, updated_at)
@@ -267,7 +268,7 @@ describe("control-plane migrations and health", () => {
     ).run()).rejects.toThrow(/CHECK/);
     expect(await db.prepare("SELECT * FROM managed_endpoint_account_capacity").all().then((rows) => rows.results))
       .toEqual([{
-        provider_account: env.CLOUDFLARE_ACCOUNT_ID,
+        provider_account: unassignedAccount,
         scan_page: 7,
         tunnel_count: 1000,
         dns_record_count: 990,
@@ -388,39 +389,7 @@ describe("control-plane migrations and health", () => {
   });
 
   it("reports an unhealthy deployment without exposing invalid configuration", async () => {
-    const misconfiguredEnv: Env = {
-      DB: env.DB,
-      EMAIL: env.EMAIL,
-      BETTER_AUTH_URL: env.BETTER_AUTH_URL,
-      EMAIL_FROM: env.EMAIL_FROM,
-      ALLOWED_ORIGINS: env.ALLOWED_ORIGINS,
-      CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID,
-      CLOUDFLARE_ZONE_ID: env.CLOUDFLARE_ZONE_ID,
-      COMPANION_HOST_SUFFIX: env.COMPANION_HOST_SUFFIX,
-      CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN,
-      CLOUDFLARE_ENDPOINT_ACCOUNTS: env.CLOUDFLARE_ENDPOINT_ACCOUNTS,
-      CLOUDFLARE_API_TOKEN_MAUSBOT_SI: env.CLOUDFLARE_API_TOKEN_MAUSBOT_SI,
-      OMB_TUNNEL_LIMIT: env.OMB_TUNNEL_LIMIT,
-      OMB_DNS_RECORD_LIMIT: env.OMB_DNS_RECORD_LIMIT,
-      OMB_TUNNEL_RECLAIM: env.OMB_TUNNEL_RECLAIM,
-      OMB_TUNNEL_OFFLINE_RECLAIM_DAYS: env.OMB_TUNNEL_OFFLINE_RECLAIM_DAYS,
-      OMB_CLEANUP_SWEEP_LIMIT: env.OMB_CLEANUP_SWEEP_LIMIT,
-      OMB_TUNNEL_RECLAIM_PREVIEW_DAYS: env.OMB_TUNNEL_RECLAIM_PREVIEW_DAYS,
-      RELAY_TUNNEL_RELEASE_PERCENT: env.RELAY_TUNNEL_RELEASE_PERCENT,
-      RELAY_TUNNEL_RELEASE_DAYS: env.RELAY_TUNNEL_RELEASE_DAYS,
-      TUNNEL_LEGACY_PHONE_CUTOFF_PERCENT: env.TUNNEL_LEGACY_PHONE_CUTOFF_PERCENT,
-      TUNNEL_MIN_APP_VERSION: env.TUNNEL_MIN_APP_VERSION,
-      TUNNEL_REASON_MIN_VERSION: env.TUNNEL_REASON_MIN_VERSION,
-      RELAY_NODES: env.RELAY_NODES,
-      RELAY_NODES_AMERICAS: env.RELAY_NODES_AMERICAS,
-      RELAY_TOKEN_KID: env.RELAY_TOKEN_KID,
-      RELAY_ROLLOUT_PERCENT: env.RELAY_ROLLOUT_PERCENT,
-      RELAY_ALLOW_INSTALLATIONS: env.RELAY_ALLOW_INSTALLATIONS,
-      RELAY_DISABLED: env.RELAY_DISABLED,
-      RELAY_CAPABLE_MIN_VERSION: env.RELAY_CAPABLE_MIN_VERSION,
-      RELAY_TOKEN_SIGNING_KEY: "",
-      BETTER_AUTH_SECRET: "too-short",
-    };
+    const misconfiguredEnv = { ...env, BETTER_AUTH_SECRET: "too-short" };
     const request = new Request(`${BASE_URL}/healthz`);
     const ctx = createExecutionContext();
     const response = await worker.fetch(request, misconfiguredEnv, ctx);
@@ -602,6 +571,8 @@ describe("Better Auth email OTP and bearer boundary", () => {
       otp: "12345678",
       type: "sign-in",
     });
+    expect(message.from).toEqual({ email: "noreply@example.com", name: "MoMo bot" });
+    expect(message.subject).toBe("Your MoMo bot sign-in code");
     expect(message.text).toContain("12345678");
     expect(message.html).toContain("12345678");
 
@@ -1013,20 +984,20 @@ describe("HTTP boundary hardening", () => {
     blocked.headers.forEach((value, name) => { serializedHeaders += `${name}: ${value}\n`; });
     expect(serializedHeaders).not.toContain("*");
 
-    const allowed = await call("/v1/me", { origin: "https://app.openmausbot.test" });
+    const allowed = await call("/v1/me", { origin: "https://app.momobot.test" });
     expect(allowed.status).toBe(401);
-    expect(allowed.headers.get("access-control-allow-origin")).toBe("https://app.openmausbot.test");
+    expect(allowed.headers.get("access-control-allow-origin")).toBe("https://app.momobot.test");
     expect(allowed.headers.get("cache-control")).toBe("no-store");
 
     const deniedPreflight = await call("/v1/installations", {
       method: "OPTIONS",
-      origin: "https://app.openmausbot.test",
+      origin: "https://app.momobot.test",
       headers: {
         "access-control-request-method": "POST",
         "access-control-request-headers": "authorization, x-unexpected",
       },
     });
     expect(deniedPreflight.status).toBe(403);
-    expect(deniedPreflight.headers.get("access-control-allow-origin")).toBe("https://app.openmausbot.test");
+    expect(deniedPreflight.headers.get("access-control-allow-origin")).toBe("https://app.momobot.test");
   });
 });

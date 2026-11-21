@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, 
 import type { ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { parse as parseYaml } from "yaml";
 
 import { redactSecretsInText } from "../shared/redact.ts";
@@ -15,6 +15,8 @@ import { pagesHomeSignature } from "./pages/access.ts";
 import { createShareHost, readFolderFromDisk } from "./share.ts";
 import type { Routine } from "./routines.ts";
 import type { BotRecord } from "./store.ts";
+
+const env = { OMB_TEAM_LIBRARY_REPOSITORY: "https://github.com/example/templates" };
 
 const KEY = "sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const skillText = "---\nname: triage\ndescription: Sort the inbox.\n---\n\n# Triage\n\nNewest first.\n";
@@ -42,7 +44,7 @@ function host(options: { submit?: (submission: unknown) => Promise<CommunityResu
   const dataDir = scratch(), botFolder = scratch();
   const patches: Array<{ messageId: string; card: TemplateCard }> = [];
   const bots = options.bots ?? [bot()];
-  const publisher = createCommunityPublisher({ access: () => options.signedIn === false ? null : { kind: "desktop", url: "https://admin.example.com/api/cloud/pages/token", token: "t" } });
+  const publisher = createCommunityPublisher({ env, access: () => options.signedIn === false ? null : { kind: "desktop", url: "https://admin.example.com/api/cloud/pages/token", token: "t" } });
   const share = createShareHost({
     dataDir, bots: () => bots, groups: () => [], routines: () => [routine], brief: () => options.brief,
     collectTeamSkills: (list) => ({ ok: true, skipped: [], skillsByBot: new Map(list.map((each) => [each.id, [{ name: "triage", description: "Sort the inbox.", instructions: skillText, enabled: true }]])) }),
@@ -77,13 +79,13 @@ describe("making a template", () => {
     const department = share.export({ scope: "department", section: "Ops", bots: [bot()] }, [routine]);
     expect(department.card.tagline).toBe("");
     const departmentDetails = share.get(department.card.id).details;
-    expect(departmentDetails.summary).toMatch(/^Shared from MausBot\. Its bots, skills, group chats and routines arrive/);
+    expect(departmentDetails.summary).toMatch(/^Shared from MoMo bot\. Its bots, skills, group chats and routines arrive/);
     expect(departmentDetails.brief).toContain("49 per seat");
     const quiet = host({ bots: [bot({ title: undefined, description: undefined })] });
     const lone = quiet.share.export({ scope: "bot", bot: bot({ title: undefined, description: undefined }) }, []);
     expect(lone.card.tagline).toBe("");
     const loneSummary = quiet.share.get(lone.card.id).details.summary ?? "";
-    expect(loneSummary).toMatch(/^Shared from MausBot\. The bot arrives as a new copy/);
+    expect(loneSummary).toMatch(/^Shared from MoMo bot\. The bot arrives as a new copy/);
     expect(loneSummary).not.toMatch(/group chats|OpenMausBot/);
     const titled = share.export({ scope: "bot", bot: bot() }, []);
     expect(titled.card.tagline).toBe("Inbox helper");
@@ -109,13 +111,21 @@ describe("making a template", () => {
 });
 
 describe("publishing", () => {
+  it("does not submit content when no community repository is configured", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    const publisher = createCommunityPublisher({ env: {}, fetch, access: () => ({ kind: "desktop", url: "https://admin.example.com/api/cloud/pages/token", token: "t" }) });
+    expect(publisher.availability()).toBe("unavailable");
+    expect(publisher.uploadUrl).toBeUndefined();
+    await expect(publisher.submit({ slug: "helper", files: {} })).resolves.toMatchObject({ ok: false, reason: "unavailable" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it("offers the folder and GitHub's upload page when this app isn't signed in or the service isn't there", async () => {
     const { share } = host({ signedIn: false });
     const made = share.export({ scope: "bot", bot: bot() }, []);
     expect(made.card.fallback).toBe("sign_in");
     expect(await share.publish(made.card.id)).toMatchObject({ status: "draft", fallback: "sign_in" });
     for (const status of [404, 501]) {
-      const publisher = createCommunityPublisher({ access: () => ({ kind: "desktop", url: "https://admin.example.com/api/cloud/pages/token", token: "t" }),
+      const publisher = createCommunityPublisher({ env, access: () => ({ kind: "desktop", url: "https://admin.example.com/api/cloud/pages/token", token: "t" }),
         fetch: (async () => new Response("{}", { status })) as typeof fetch });
       const result = await publisher.submit({ slug: "helper", files: {} });
       expect(result).toMatchObject({ ok: false, reason: "unavailable" });
@@ -124,15 +134,15 @@ describe("publishing", () => {
 
   it("posts the folder's files to the Admin with the account's sign-in, and shows the link it answers with", async () => {
     let sent: { url: string; init: RequestInit } | null = null;
-    const publisher = createCommunityPublisher({
+    const publisher = createCommunityPublisher({ env,
       access: () => ({ kind: "desktop", url: "https://admin.example.com/api/cloud/pages/token", token: "omb_pd_token" }),
       fetch: (async (url: string, init: RequestInit) => {
         sent = { url, init };
-        return Response.json({ link: "https://github.com/milind-soni/openmausbot-teams/tree/abc/teams/helper", prUrl: "https://github.com/milind-soni/openmausbot-teams/pull/7" });
+        return Response.json({ link: "https://github.com/example/templates/tree/abc/teams/helper", prUrl: "https://github.com/example/templates/pull/7" });
       }) as typeof fetch,
     });
     const result = await publisher.submit({ slug: "helper", files: { "bot.md": "x", "avatars/helper.png": { base64: "iVBORw0K" } } });
-    expect(result).toEqual({ ok: true, link: "https://github.com/milind-soni/openmausbot-teams/tree/abc/teams/helper", prUrl: "https://github.com/milind-soni/openmausbot-teams/pull/7" });
+    expect(result).toEqual({ ok: true, link: "https://github.com/example/templates/tree/abc/teams/helper", prUrl: "https://github.com/example/templates/pull/7" });
     expect(sent!.url).toBe("https://admin.example.com/api/cloud/community/submissions");
     expect(sent!.init.redirect).toBe("error");
     expect((sent!.init.headers as Record<string, string>).authorization).toBe("Bearer omb_pd_token");
@@ -143,14 +153,14 @@ describe("publishing", () => {
     const home = { kind: "home" as const, url: "https://admin.example.com/api/cloud/pages/token", machineId: "cm-home", secret: "s".repeat(43) };
     let headers: Record<string, string> = {}, body = "";
     let answer = Response.json({ error: "slug_taken", message: "Someone else already shares a template by that name." }, { status: 409 });
-    const publisher = createCommunityPublisher({ access: () => home, now: () => 1_792_670_400_000,
+    const publisher = createCommunityPublisher({ env, access: () => home, now: () => 1_792_670_400_000,
       fetch: (async (_url: string, init: RequestInit) => { headers = init.headers as Record<string, string>; body = String(init.body); return answer; }) as typeof fetch });
     expect(await publisher.submit({ slug: "a", files: { "bot.md": "x" } })).toEqual({ ok: false, reason: "failed", message: "Someone else already shares a template by that name." });
     const expected = pagesHomeSignature(home.secret, home.machineId, headers["x-omb-cloud-timestamp"]!, headers["x-omb-cloud-nonce"]!, body, "omb-community-v1");
     expect(headers["x-omb-cloud-signature"]).toBe(`v1=${expected}`);
     expect(expected).not.toBe(pagesHomeSignature(home.secret, home.machineId, headers["x-omb-cloud-timestamp"]!, headers["x-omb-cloud-nonce"]!, body));
-    answer = Response.json({ prUrl: "https://github.com/milind-soni/openmausbot-teams/pull/2", link: "https://github.com/milind-soni/openmausbot-teams/tree/b/teams/a", updated: true });
-    expect(await publisher.submit({ slug: "a", files: { "bot.md": "x" } })).toMatchObject({ ok: true, prUrl: "https://github.com/milind-soni/openmausbot-teams/pull/2" });
+    answer = Response.json({ prUrl: "https://github.com/example/templates/pull/2", link: "https://github.com/example/templates/tree/b/teams/a", updated: true });
+    expect(await publisher.submit({ slug: "a", files: { "bot.md": "x" } })).toMatchObject({ ok: true, prUrl: "https://github.com/example/templates/pull/2" });
   });
 
   it("sends a folder the Admin's checks accept: BotMRR v2 frontmatter, skills named as their folders, pictures as base64, paused routines, under the caps", async () => {
@@ -186,8 +196,8 @@ describe("publishing", () => {
   });
 
   it("never shows a link outside the community repository", async () => {
-    const publisher = createCommunityPublisher({ access: () => ({ kind: "desktop", url: "https://admin.example.com/x", token: "t" }),
-      fetch: (async () => Response.json({ link: "https://github.com/someone/else/tree/main/teams/a", prUrl: "https://github.com/milind-soni/openmausbot-teams/pull/1" })) as typeof fetch });
+    const publisher = createCommunityPublisher({ env, access: () => ({ kind: "desktop", url: "https://admin.example.com/x", token: "t" }),
+      fetch: (async () => Response.json({ link: "https://github.com/someone/else/tree/main/teams/a", prUrl: "https://github.com/example/templates/pull/1" })) as typeof fetch });
     expect(await publisher.submit({ slug: "a", files: {} })).toMatchObject({ ok: false, reason: "failed" });
   });
 
@@ -198,7 +208,7 @@ describe("publishing", () => {
     share.shown(made.card.id, "thread-1", "message-1");
     expect(await share.publish(made.card.id)).toMatchObject({ status: "failed", error: "You've published a lot today. Try again tomorrow." });
     expect(patches.map((patch) => patch.card.status)).toEqual(["publishing", "failed"]);
-    answer = { ok: true, link: "https://github.com/milind-soni/openmausbot-teams/tree/a/teams/helper", prUrl: "https://github.com/milind-soni/openmausbot-teams/pull/1" };
+    answer = { ok: true, link: "https://github.com/example/templates/tree/a/teams/helper", prUrl: "https://github.com/example/templates/pull/1" };
     expect(await share.publish(made.card.id)).toMatchObject({ status: "published", link: answer.link });
     expect(share.delete(made.card.id).status).toBe("gone");
     expect(existsSync(made.dir)).toBe(false);

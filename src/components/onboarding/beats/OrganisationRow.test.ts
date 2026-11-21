@@ -68,7 +68,7 @@ async function mount(state: ManagedDesktopState = { status: "signed-out" }) {
 
 const connecting: ManagedDesktopState = {
   status: "connecting",
-  enrollment: { userCode: "ABCDE-FGHIJ", verificationUri: "https://admin.openmausbot.com/enroll?code=ABCDE-FGHIJ", expiresAt: Date.now() + 60_000 },
+  enrollment: { userCode: "ABCDE-FGHIJ", verificationUri: "https://admin.example.test/enroll?code=ABCDE-FGHIJ", expiresAt: Date.now() + 60_000 },
 };
 const connected: ManagedDesktopState = {
   status: "connected",
@@ -82,6 +82,7 @@ const connected: ManagedDesktopState = {
 };
 
 beforeEach(() => {
+  vi.stubEnv("VITE_MOMO_ORGANIZATION_URL", "https://admin.example.test");
   fixture.values = [];
   fixture.index = 0;
   fixture.effects = [];
@@ -105,6 +106,7 @@ beforeEach(() => {
   setLocale("en");
 });
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   setLocale("en");
 });
@@ -114,7 +116,7 @@ describe("organisation sign-in row in the welcome flow", () => {
     expect(render().html).toBe("");
     await mount();
     const html = render().html;
-    expect(html).toContain("Using MausBot at work?");
+    expect(html).toContain("Using MoMo bot at work?");
     expect(html).toContain("Sign in with your organization.");
     expect(html).toContain("Other Admin address");
     expect(bridge.begin).not.toHaveBeenCalled();
@@ -122,18 +124,18 @@ describe("organisation sign-in row in the welcome flow", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("signs in to the default Admin once, then follows the browser step to connected", async () => {
+  it("signs in to the configured Admin once, then follows the browser step to connected", async () => {
     await mount();
     const signIn = button("Sign in")!;
     signIn.props.onClick!();
     signIn.props.onClick!();
     await flush();
-    expect(bridge.begin).toHaveBeenCalledExactlyOnceWith({ portalOrigin: "https://admin.openmausbot.com" });
+    expect(bridge.begin).toHaveBeenCalledExactlyOnceWith({ portalOrigin: "https://admin.example.test" });
 
     let html = render().html;
     expect(html).toContain("Finish in your browser");
     expect(html).toContain("ABCDE-FGHIJ");
-    expect(html).not.toContain("Using MausBot at work?");
+    expect(html).not.toContain("Using MoMo bot at work?");
     expect(onConnected).not.toHaveBeenCalled();
 
     push(connected);
@@ -152,7 +154,15 @@ describe("organisation sign-in row in the welcome flow", () => {
     button("Cancel sign-in")!.props.onClick!();
     await flush();
     expect(bridge.cancelEnrollment).toHaveBeenCalledOnce();
-    expect(render().html).toContain("Using MausBot at work?");
+    expect(render().html).toContain("Using MoMo bot at work?");
+  });
+
+  it("opens Settings for an address when no portal is configured", async () => {
+    vi.stubEnv("VITE_MOMO_ORGANIZATION_URL", undefined);
+    await mount();
+    button("Sign in")!.props.onClick!();
+    expect(onOpenSettings).toHaveBeenCalledOnce();
+    expect(bridge.begin).not.toHaveBeenCalled();
   });
 
   it("sends another Admin address to Settings instead of asking here", async () => {

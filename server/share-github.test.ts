@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { canonicalJson, parsePackageDocument } from "../shared/package-format.ts";
 import { writeShareFolder } from "../shared/share-folder.ts";
 import { fetchGithubTemplate, githubTemplateSource } from "./share-github.ts";
-import { fetchLibraryTeam, TEAM_LIBRARY_RAW_ROOT } from "./team-library.ts";
+import { fetchLibraryTeam } from "./team-library.ts";
 
 const RAW = "https://raw.githubusercontent.com";
 const team = parsePackageDocument(JSON.parse(readFileSync(join(import.meta.dirname, "..", "shared", "package-fixtures", "full-team.v2.json"), "utf8")));
@@ -101,6 +101,7 @@ describe("GitHub template links", () => {
   });
 
   it("reads a gallery team from its template folder when the catalog names one", async () => {
+    const TEAM_LIBRARY_RAW_ROOT = "https://raw.githubusercontent.com/example/templates/main";
     const folder = writeShareFolder(team, "department");
     const catalog = { format: "openmaus.catalog", version: 1, teams: [{ slug: "sales-desk", name: "Sales desk", summary: "Sales.", category: "Sales",
       manifest: "teams/sales-desk/team.mausteam.json", readme: "teams/sales-desk/README.md", members: 3, skills: [], requires: { apps: [] },
@@ -111,7 +112,7 @@ describe("GitHub template links", () => {
       const body = url.startsWith(`${TEAM_LIBRARY_RAW_ROOT}/teams/sales-desk/`) ? folder[path] : undefined;
       return body === undefined ? new Response("", { status: 404 }) : new Response(typeof body === "string" ? body : new Uint8Array(body));
     }) as typeof fetch;
-    const loaded = await fetchLibraryTeam("sales-desk", fetcher);
+    const loaded = await fetchLibraryTeam("sales-desk", fetcher, { OMB_TEAM_LIBRARY_REPOSITORY: "https://github.com/example/templates" });
     expect("package" in loaded && loaded.package.skills?.entries).toHaveLength(3);
   });
 });

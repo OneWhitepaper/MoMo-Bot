@@ -1,35 +1,32 @@
 #!/bin/sh
-# MausBot's server as your own user's service, with rootless Podman: no root, no Docker. One line, run as yourself:
+# MoMo bot's server as your own user's service, with rootless Podman: no root, no Docker. One line, run as yourself:
 #
-#   curl -fsSL https://raw.githubusercontent.com/milind-soni/OpenMausBot/main/deploy/podman/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/OneWhitepaper/MoMo-Bot/main/deploy/podman/install.sh | sh
 #   ... | sh -s -- --lan                 also answer other devices on this network (private addresses only)
 #   ... | sh -s -- --uninstall           stops and removes the service; keeps your data
 #
-# It writes a Quadlet unit (~/.config/containers/systemd/openmausbot.container) that runs the published server image,
+# It writes a Quadlet unit (~/.config/containers/systemd/momobot.container) that runs the published server image,
 # pinned by its digest, as your user: systemd restarts it when it fails, and starts it at boot once your user may run
 # services without being logged in (it prints the one `loginctl enable-linger` line for that; it never runs sudo).
-# Your data stays in ~/.local/share/openmausbot/data. Running it again repairs the install and never touches your data.
-# Updates, with a copy of the data first and a way back: ~/.local/share/openmausbot/update.sh
+# Your data stays in ~/.local/share/momobot/data. Running it again repairs the install and never touches your data.
+# Updates, with a copy of the data first and a way back: ~/.local/share/momobot/update.sh
 #
 # WARNING: the server shares this machine's network, with less isolation than the Docker install (docs/self-hosting.md,
 # Podman). A port a bot or tool opens on 0.0.0.0 is open on every address of the machine; bots reach every service on
 # its loopback; every local account counts as the owner. Use it on a machine only you sign in to, behind a firewall.
 #
 # Nothing runs until the last line calls main, so a download that is cut off part-way runs nothing. It sends no
-# telemetry. It contacts the image registry (ghcr.io), GitHub's release list and this repository's files.
+# telemetry. It contacts the image registry (ghcr.io), and this repository's files.
 set -eu
 
 settings() {
-  IMAGE_REPO=ghcr.io/milind-soni/openmausbot
-  STABLE_URL=https://raw.githubusercontent.com/milind-soni/OpenMausBot/channels/stable.json
-  RELEASES_URL=https://api.github.com/repos/milind-soni/OpenMausBot/releases/latest
-  REPOSITORY_FILES=https://raw.githubusercontent.com/milind-soni/OpenMausBot
-  PINNED='^ghcr\.io/milind-soni/openmausbot@sha256:[0-9a-f]{64}$'
+  IMAGE_REPO=ghcr.io/onewhitepaper/momo-bot
+  REPOSITORY_FILES=https://raw.githubusercontent.com/OneWhitepaper/MoMo-Bot
   # One copy of this repository's files to use instead (https://… or file:///…), as deploy/install.sh takes it.
   SOURCE_ASKED="${OMB_INSTALL_SOURCE:-}"
-  INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/openmausbot"
+  INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/momobot"
   UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/containers/systemd"
-  NAME=openmausbot
+  NAME=momobot
   HEALTH_WAIT_S="${OMB_INSTALL_HEALTH_WAIT_S:-240}"
   MODE=install
   DIR_GIVEN=no
@@ -50,11 +47,12 @@ fail() {
 usage() {
   say "Usage: curl -fsSL $REPOSITORY_FILES/main/deploy/podman/install.sh | sh -s -- [options]"
   say ""
+  say "  OMB_INSTALL_IMAGE  a release tag or digest, required for a new install"
   say "  --lan              also answer other devices on this network (private addresses only, plain http)"
   say "  --local            answer this machine only again (the default)"
   say "  --port N           the server's port on this machine (default 8799; webhooks use the next one)"
   say "  --public-url URL   the HTTPS address a proxy or tunnel in front of it serves, for pairing links"
-  say "  --dir PATH         where the data and settings live (default ~/.local/share/openmausbot)"
+  say "  --dir PATH         where the data and settings live (default ~/.local/share/momobot)"
   say "  --uninstall        stop and remove the service; keeps the data"
 }
 
@@ -112,12 +110,12 @@ choose_dir() {
   INSTALL_DIR=$(printf '%s' "$INSTALL_DIR" | sed 's|//*$||')
   case "$INSTALL_DIR" in
     /?*) ;;
-    *) fail "--dir takes an absolute path of a folder, like /srv/openmausbot." ;;
+    *) fail "--dir takes an absolute path of a folder, like /srv/momobot." ;;
   esac
   existing=$(installed_dir || true)
   if [ -n "$existing" ] && [ "$existing" != "$INSTALL_DIR" ]; then
     if [ "$DIR_GIVEN" = yes ]; then
-      fail "This user's MausBot service already uses $existing, and --dir names $INSTALL_DIR. Nothing was changed. Run this again with --dir $existing, or without --dir. To move it: --uninstall first, move the folder, then install with --dir and the new place."
+      fail "This user's MoMo bot service already uses $existing, and --dir names $INSTALL_DIR. Nothing was changed. Run this again with --dir $existing, or without --dir. To move it: --uninstall first, move the folder, then install with --dir and the new place."
     fi
     INSTALL_DIR=$existing
     note "The service already uses $INSTALL_DIR, so this run does too (--dir names it)."
@@ -223,29 +221,27 @@ unset_env() { # file name
   if grep -q "^$2=" "$1" 2>/dev/null; then { grep -v "^$2=" "$1" || true; } | write_file "$1" 600; fi
 }
 
-# The image by digest: the one update.sh pinned, else the stable channel's, else the newest release's (only while no
-# version is stable: the channel answers 404). As update.sh decides it, and never a tag that moves (`latest`).
 choose_image() {
   asked="${OMB_INSTALL_IMAGE:-}"
   pinned=$(env_value "$INSTALL_DIR/.env" OMB_IMAGE)
   if [ -n "$asked" ]; then
-    case "$asked" in *[!A-Za-z0-9/:._@-]*) fail "OMB_INSTALL_IMAGE is not an image name." ;; esac
+    case "$asked" in *[!A-Za-z0-9/:._@-]* | -*) fail "OMB_INSTALL_IMAGE is not an image name." ;; esac
     case "${asked##*/}" in
       *@sha256:*) ;;
-      *:latest) fail "OMB_INSTALL_IMAGE names the latest tag, which follows every commit. Name a release, like $IMAGE_REPO:v0.1.151." ;;
+      *:latest | *:stable) fail "OMB_INSTALL_IMAGE names a moving tag. Name a release, like $IMAGE_REPO:v0.1.151." ;;
       *:?*) ;;
       *) fail "OMB_INSTALL_IMAGE needs a release tag, like $IMAGE_REPO:v0.1.151." ;;
     esac
     IMAGE=$asked
     ok "version: $IMAGE, as asked"
   elif [ -n "$pinned" ]; then
-    case "$pinned" in *[!A-Za-z0-9/:._@-]*) fail "OMB_IMAGE in $INSTALL_DIR/.env is not an image name." ;; esac
+    case "$pinned" in *[!A-Za-z0-9/:._@-]* | -*) fail "OMB_IMAGE in $INSTALL_DIR/.env is not an image name." ;; esac
     IMAGE=$pinned
     case "$IMAGE" in
       *@sha256:*) ;;
       *)
         # update.sh's rollback can name the image that ran before by a name of this machine's own
-        # (openmausbot-before-update:local), which no registry has: never pulled, pinned by the digest it came with.
+        # (momobot-before-update:local), which no registry has: never pulled, pinned by the digest it came with.
         if podman image exists "$IMAGE" 2>/dev/null; then
           digest=$(podman image inspect -f '{{range .RepoDigests}}{{println .}}{{end}}' "$IMAGE" 2>/dev/null | grep -E "^${IMAGE_REPO}@sha256:[0-9a-f]{64}$" | head -n 1 || true)
           if [ -z "$digest" ]; then
@@ -258,10 +254,10 @@ choose_image() {
     esac
     ok "version: the one already installed ($IMAGE); update.sh changes it"
   else
-    stable_image
+    fail "Set OMB_INSTALL_IMAGE to a MoMo bot image, for example $IMAGE_REPO:v0.1.151, or build from this checkout with Podman Compose."
   fi
-  say "Downloading MausBot (the first time is about a gigabyte)..."
-  podman pull -q "$IMAGE" >/dev/null || fail "MausBot could not be downloaded ($IMAGE; Podman's message is above). Check this machine's outbound HTTPS, then run this again."
+  say "Downloading MoMo bot (the first time is about a gigabyte)..."
+  podman pull -q "$IMAGE" >/dev/null || fail "MoMo bot could not be downloaded ($IMAGE; Podman's message is above). Check this machine's outbound HTTPS, then run this again."
   # A tag moves; the digest does not, so a restart never brings a different version than update.sh chose.
   case "$IMAGE" in
     *@sha256:*) ;;
@@ -275,41 +271,17 @@ choose_image() {
           ;;
         esac
       done
-      [ -n "$digest" ] || fail "MausBot $IMAGE was downloaded, but Podman did not say its digest, so it cannot be pinned (a tag moves, a digest does not). Nothing was changed. Run this again, or name the image by its digest: OMB_INSTALL_IMAGE=$repo@sha256:..."
+      [ -n "$digest" ] || fail "MoMo bot $IMAGE was downloaded, but Podman did not say its digest, so it cannot be pinned (a tag moves, a digest does not). Nothing was changed. Run this again, or name the image by its digest: OMB_INSTALL_IMAGE=$repo@sha256:..."
       IMAGE=$digest
       ;;
   esac
 }
 
-# The stable channel's image; the newest release only while the channel does not exist yet (404). Any other answer, or
-# one that names no image pinned by digest, stops here, as deploy/update.sh does.
-stable_image() {
-  body=$(mktemp)
-  code=$(curl -sS --max-time 20 -o "$body" -w '%{http_code}' "$STABLE_URL" 2>/dev/null || true)
-  IMAGE=$(sed -n 's/.*"image": *"\([^"]*\)".*/\1/p' "$body" 2>/dev/null | head -n 1)
-  rm -f "$body"
-  case "$code" in
-    200)
-      printf '%s' "$IMAGE" | grep -Eq "$PINNED" || fail "The stable channel ($STABLE_URL) names no image this installer accepts. Nothing was changed. Run this again later, or name a version: OMB_INSTALL_IMAGE=$IMAGE_REPO:v0.1.151"
-      ok "version: the stable channel"
-      ;;
-    404)
-      release=$(curl -fsS --max-time 20 "$RELEASES_URL" 2>/dev/null | sed -n 's/.*"tag_name": *"\(v[0-9][0-9.]*\)".*/\1/p' | head -n 1)
-      [ -n "$release" ] || fail "The newest MausBot release could not be read from api.github.com. Check this machine's outbound HTTPS, then run this again."
-      IMAGE="$IMAGE_REPO:$release"
-      ok "version: $release, the newest release (no version is stable yet)"
-      ;;
-    *) fail "The stable channel could not be read ($STABLE_URL answered ${code:-nothing}). Nothing was changed. Check this machine's outbound HTTPS, then run this again." ;;
-  esac
-}
-
-# The image's own user and group (its `maus`): the container runs as them, mapped to this user by keep-id, so the data
-# folder stays this user's own on the host. Never a recursive chown (`:U`).
 image_user() {
   RUN_UID=$(podman run --rm --network none --entrypoint id "$IMAGE" -u 2>/dev/null || true)
   RUN_GID=$(podman run --rm --network none --entrypoint id "$IMAGE" -g 2>/dev/null || true)
   case "$RUN_UID:$RUN_GID" in
-    *[!0-9:]* | : | :* | *:) fail "The MausBot image did not say which user it runs as. Run this again; if it still fails, send us this line." ;;
+    *[!0-9:]* | : | :* | *:) fail "The MoMo bot image did not say which user it runs as. Run this again; if it still fails, send us this line." ;;
   esac
 }
 
@@ -327,8 +299,8 @@ write_settings() {
 # OMB_PUBLIC_URL when asked, and keeps every other line. Apply a change with: systemctl --user restart openmausbot
 OMB_PORT=8799
 OMB_WEBHOOK_PORT=8800
-OMB_SERVER_NAME=mausbot-podman
-OMB_CLI_PREFIX=podman exec -it openmausbot openmausbot
+OMB_SERVER_NAME="MoMo bot"
+OMB_CLI_PREFIX=podman exec -it momobot momobot
 ENV
   fi
   if [ -n "$PORT" ]; then
@@ -364,11 +336,11 @@ unit_text() {
   label=""
   if selinux_on; then label=":Z"; fi
   cat <<UNIT
-# Written by MausBot's Podman installer (deploy/podman/install.sh), and written again each time it runs. The server's
+# Written by MoMo bot's Podman installer (deploy/podman/install.sh), and written again each time it runs. The server's
 # settings are in $INSTALL_DIR/server.env; update.sh changes Image= below.
 [Unit]
-Description=MausBot server (rootless Podman)
-Documentation=https://github.com/milind-soni/OpenMausBot/blob/main/docs/self-hosting.md#podman-rootless-as-a-service
+Description=MoMo bot server (rootless Podman)
+Documentation=https://github.com/OneWhitepaper/MoMo-Bot/blob/main/docs/self-hosting.md#podman-rootless-as-a-service
 
 [Container]
 ContainerName=$NAME
@@ -465,24 +437,24 @@ port_taken() { ss -ltnH "( sport = :$1 )" 2>/dev/null | grep -q .; }
 start_service() {
   update_busy
   if ! systemctl --user is-active --quiet "$NAME" && port_taken "$SERVER_PORT"; then
-    fail "Something else on this machine already listens on port $SERVER_PORT (another MausBot server?). Stop it, or run this again with --port and a free port, like --port 8811."
+    fail "Something else on this machine already listens on port $SERVER_PORT (another MoMo bot server?). Stop it, or run this again with --port and a free port, like --port 8811."
   fi
   if [ "$CHANGED" = yes ] || ! systemctl --user is-active --quiet "$NAME"; then
-    say "Starting MausBot..."
+    say "Starting MoMo bot..."
     systemctl --user restart "$NAME" ||
-      fail "MausBot could not be started. Its log: journalctl --user -u $NAME -n 50"
+      fail "MoMo bot could not be started. Its log: journalctl --user -u $NAME -n 50"
   fi
-  wait_healthy || fail "MausBot started but did not answer within $HEALTH_WAIT_S seconds. Its log: journalctl --user -u $NAME -n 50"
+  wait_healthy || fail "MoMo bot started but did not answer within $HEALTH_WAIT_S seconds. Its log: journalctl --user -u $NAME -n 50"
 }
 
 finish() {
   say ""
-  say "MausBot is running as your user's service ($NAME), on http://127.0.0.1:$SERVER_PORT."
+  say "MoMo bot is running as your user's service ($NAME), on http://127.0.0.1:$SERVER_PORT."
   if [ "$(env_value "$INSTALL_DIR/server.env" OMB_LAN)" = 1 ]; then say "Its port $SERVER_PORT also answers other devices on this network, from private addresses only, over plain http; each device pairs."; fi
   say ""
-  say "  Pair a device   podman exec -it $NAME openmausbot pair"
+  say "  Pair a device   podman exec -it $NAME momobot pair"
   say "  Log             journalctl --user -u $NAME -f"
-  say "  Update          $INSTALL_DIR/update.sh"
+  say "  Update          $INSTALL_DIR/update.sh --image REGISTRY/IMAGE:TAG"
   say "  Data            $DATA_DIR"
   say ""
   say "Warning: it shares this machine's network, which isolates less than the Docker install."
@@ -492,7 +464,7 @@ finish() {
   say "  - Every account and program on this machine counts as the owner on port $SERVER_PORT, and can attach to Chrome's"
   say "    debugging port."
   say "Use it on a machine only you sign in to, behind a host firewall:"
-  say "https://github.com/milind-soni/OpenMausBot/blob/main/docs/self-hosting.md#podman-rootless-as-a-service"
+  say "https://github.com/OneWhitepaper/MoMo-Bot/blob/main/docs/self-hosting.md#podman-rootless-as-a-service"
   say ""
   if linger_on; then
     say "It starts at boot, without anyone logged in."
@@ -525,11 +497,11 @@ run_uninstall() {
   rm -f "$UNIT"
   systemctl --user daemon-reload 2>/dev/null || true
   rm -f "$INSTALL_DIR/podman.unit"
-  say "MausBot's service is stopped and removed. Your data stays in $DATA_DIR."
+  say "MoMo bot's service is stopped and removed. Your data stays in $DATA_DIR."
   say "To remove the data too (some files belong to the container's other ids, so through Podman):"
   say "  podman unshare rm -rf $INSTALL_DIR"
   say "The copies of the data update.sh kept: podman volume ls --filter label=com.mausbot.role=update-backup"
-  say "The downloaded images: podman image ls ghcr.io/milind-soni/openmausbot"
+  say "The downloaded images: podman image ls ghcr.io/onewhitepaper/momo-bot"
 }
 
 main() {

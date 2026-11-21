@@ -58,6 +58,7 @@ let bridge: ManagedDesktopBridge;
 let push: (state: ManagedDesktopState) => void;
 let unsubscribe = vi.fn<() => void>();
 beforeEach(() => {
+  vi.stubEnv("VITE_MOMO_ORGANIZATION_URL", "https://admin.example.test");
   fixture.values = []; fixture.index = 0; fixture.effects = []; fixture.updating = false;
   fixture.store = { bots: [], instances: [], dispatch: vi.fn(), flushBotPatches: vi.fn(async () => null) };
   unsubscribe = vi.fn(); push = () => {};
@@ -73,7 +74,11 @@ beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn());
   setLocale("en");
 });
-afterEach(() => { vi.unstubAllGlobals(); setLocale("en"); });
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+  setLocale("en");
+});
 async function ready(state: ManagedDesktopState = { status: "signed-out" }) {
   vi.mocked(bridge.state).mockResolvedValueOnce(state);
   render(); const cleanup = fixture.effects[0](); await flush(); return cleanup;
@@ -103,7 +108,16 @@ describe("optional desktop Organisation settings", () => {
     expect(bridge.begin).not.toHaveBeenCalled();
   });
 
-  it("uses the default portal from one sign-in action and keeps custom setup in a fold", async () => {
+  it("requires an address when no organization portal is configured", async () => {
+    vi.stubEnv("VITE_MOMO_ORGANIZATION_URL", undefined);
+    await ready();
+    const html = render().html;
+    expect(html).toContain('type="url"');
+    expect(html).not.toContain("data-organization-sign-in");
+    expect(bridge.begin).not.toHaveBeenCalled();
+  });
+
+  it("uses the configured portal from one sign-in action and keeps custom setup in a fold", async () => {
     await ready();
     let view = render();
     expect(view.html).toContain("Sign in with your organization");
@@ -113,7 +127,7 @@ describe("optional desktop Organisation settings", () => {
     expect(bridge.begin).not.toHaveBeenCalled();
     const signIn = () => view.nodes.find(node => node.type === "button" && (node.props as { "data-organization-sign-in"?: string })["data-organization-sign-in"] === "")!.props.onClick!();
     signIn(); signIn(); await flush();
-    expect(bridge.begin).toHaveBeenCalledExactlyOnceWith({ portalOrigin: "https://admin.openmausbot.com" });
+    expect(bridge.begin).toHaveBeenCalledExactlyOnceWith({ portalOrigin: "https://admin.example.test" });
     expect(fetch).not.toHaveBeenCalled();
     const progress = render().html;
     expect(progress).toContain("Finish signing in through your browser");
@@ -193,7 +207,7 @@ describe("optional desktop Organisation settings", () => {
   it("explains a lapsed Admin licence without a sign-in loop and shows Company models unavailable", async () => {
     await ready({ ...connected, status: "license-expired" });
     const html = render().html;
-    expect(html).toContain("Your organization&#x27;s OpenMaus Admin license has expired. Contact your admin.");
+    expect(html).toContain("Your organization&#x27;s license has expired. Contact your admin.");
     expect(html).not.toContain("Disconnect below, then sign in again");
     expect(html).not.toContain("Sign in with your organization");
     expect(html).toContain("Unavailable until the licence is renewed");

@@ -11,6 +11,7 @@ dist-server
 .DS_Store
 *.tsbuildinfo
 electron/resources/speech-helper
+electron/resources/MoMo bot Speech.app
 electron/resources/OpenMausBot Speech.app
 # stale helper from the removed Teach a skill recorder
 electron/resources/OpenMausBot Recorder.app
@@ -21,6 +22,7 @@ release
 .dev.vars
 .dev.vars.*
 !cloudflare/control-plane/.dev.vars.example
+/cloudflare/*/wrangler.production.jsonc
 cloudflare/composio-broker/worker-configuration.d.ts
 cloudflare/control-plane/worker-configuration.d.ts
 .claude/worktrees/

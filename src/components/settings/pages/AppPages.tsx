@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { productName } from "@/lib/brand";
-import { FEEDBACK_URL, HELP_CENTER_URL, desktopAppVersion, openExternalLink } from "@/lib/app-links";
+import { analyticsConfigured } from "@/lib/analytics-config";
+import { FEEDBACK_URL, HELP_CENTER_URL, RELEASES_URL, desktopAppVersion, openExternalLink } from "@/lib/app-links";
 import { t } from "@/lib/i18n";
 import { useStoreDispatch } from "@/state/store-select";
 import { AboutDialog } from "../../AboutDialog";
@@ -28,7 +29,7 @@ import { resolveSkin, SKINS } from "@/lib/skins";
 import { versionLine } from "../settings-context";
 import { useSettingsShell } from "../settings-shell";
 import { PlaceBadge } from "../SettingsNav";
-import { InertRow, useSwitchToComputer } from "../inert";
+import { InertRow } from "../inert";
 import { useOtherPlaces } from "../settings-context";
 
 /** A row this page can't change because it lives on This computer: not on the app's own home page (main's home:page). */
@@ -39,18 +40,16 @@ export function AppPage() {
   const dispatch = useStoreDispatch();
   const [about, setAbout] = useState(false);
   const desk = ctx.desktop && !ctx.client;
-  const computer = useSwitchToComputer();
   const appVersionLine = versionLine(desktopAppVersion());
   return <>
     {ctx.desktop && (
       <SettingsGroup label={t("settings.updates.title")} block="updates">
         <SettingsRows>
-          {window.ogb?.updater ? <UpdatesRow title={appVersionLine} />
-            // On the app's own page with no updater (a package or store build), the version is live and says why
-            // there is no button; only another place's page names This computer.
-            : ctx.home || ctx.client ? <SettingRow title={appVersionLine} subtitle={t("settings.updates.fromPackage")}>{null}</SettingRow>
-              : <InertRow title={appVersionLine} reason={t("settings.inert.checkFromHere", { place: computer.name })}
-                control={<button type="button" className="ui-button" tabIndex={-1}>{t("settings.updates.check")}</button>} />}
+          {window.ogb?.updater ? <UpdatesRow title={appVersionLine} /> : (
+            <SettingRow title={appVersionLine} subtitle={t("settings.updates.manual")}>
+              <button type="button" className="ui-button" onClick={() => void openExternalLink(RELEASES_URL)}>{t("about.releases")}</button>
+            </SettingRow>
+          )}
         </SettingsRows>
       </SettingsGroup>
     )}
@@ -135,9 +134,9 @@ export function GeneralPage() {
         <SettingsRows>{window.ogb?.openAtLogin ? <OpenAtLoginRow simple /> : <InertRow title={t("settings.openAtLogin.title")} control={<Switch checked={false} tabIndex={-1} aria-label={t("settings.openAtLogin.title")} />} />}</SettingsRows>
       </SettingsGroup>
     )}
-    <SettingsGroup label={t("settings.general.privacy")} block="privacy">
+    {analyticsConfigured() && <SettingsGroup label={t("settings.general.privacy")} block="privacy">
       <SettingsRows><AnalyticsRow simple /></SettingsRows>
-    </SettingsGroup>
+    </SettingsGroup>}
   </>;
 }
 

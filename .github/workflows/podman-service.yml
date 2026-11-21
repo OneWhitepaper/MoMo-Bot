@@ -31,6 +31,17 @@ jobs:
           persist-credentials: false
       - name: shellcheck
         run: shellcheck deploy/podman/install.sh deploy/e2e/podman.sh
+      - name: Stage two server revisions in a registry on the runner
+        run: |
+          set -euo pipefail
+          docker run -d --name momo-fixture-registry -p 127.0.0.1:5000:5000 registry:2
+          docker build --target server -t momobot-fixture:base .
+          for revision in 0.1.150 0.1.151; do
+            image="localhost:5000/momobot-fixture:v$revision"
+            printf 'FROM momobot-fixture:base\nENV OMB_APP_VERSION=%s\nLABEL org.opencontainers.image.version=%s\n' "$revision" "$revision" |
+              docker build -f - -t "$image" .
+            docker push "$image"
+          done
       - name: Install, restart, update, roll back and uninstall
         env:
           OUT: ${{ runner.temp }}/podman-service

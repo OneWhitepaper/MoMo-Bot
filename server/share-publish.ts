@@ -2,7 +2,8 @@
 // request on the community repository from its own GitHub App: nobody needs a GitHub account. The request is signed the
 // way page publishing signs its token request: a desktop's MausBot sign-in token, or a Cloud home's machine signature
 // over the label `omb-community-v1`.
-import { COMMUNITY_REPOSITORY_URL } from "../shared/share-card.ts";
+import { PRODUCT_NAME } from "../shared/product-brand.ts";
+import { teamLibrarySource } from "./team-library-source.ts";
 import { pagesAuthHeaders, type PagesAccess } from "./pages/access.ts";
 
 export const COMMUNITY_SUBMISSIONS_PATH = "/api/cloud/community/submissions";
@@ -25,11 +26,11 @@ export type CommunityResult =
   | { ok: false; reason: "sign_in" | "unavailable" | "failed"; message: string };
 
 /** Security: only links into the community repository are shown as a template's link. */
-function communityLink(value: unknown): string | null {
+function communityLink(value: unknown, repositoryUrl: string): string | null {
   if (typeof value !== "string") return null;
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && url.hostname === "github.com" && `${url.origin}${url.pathname}`.startsWith(`${COMMUNITY_REPOSITORY_URL}/`) ? url.href : null;
+    return url.protocol === "https:" && url.hostname === "github.com" && `${url.origin}${url.pathname}`.startsWith(`${repositoryUrl}/`) ? url.href : null;
   } catch {
     return null;
   }
@@ -39,20 +40,24 @@ const said = (body: Record<string, unknown>, fallback: string) =>
   typeof body.message === "string" && body.message.trim() ? body.message.trim().slice(0, 300)
     : typeof body.error === "string" && body.error.trim() ? body.error.trim().slice(0, 300) : fallback;
 
-export function createCommunityPublisher(options: { access: () => PagesAccess | null; notOffered?: () => boolean; selfHosted?: boolean; fetch?: typeof fetch; now?: () => number }) {
+export function createCommunityPublisher(options: { access: () => PagesAccess | null; notOffered?: () => boolean; selfHosted?: boolean; env?: NodeJS.ProcessEnv; fetch?: typeof fetch; now?: () => number }) {
+  const source = teamLibrarySource(options.env);
   const http = options.fetch ?? fetch, now = options.now ?? Date.now;
   /** Why Publish can't be offered here, before trying; null when it can. */
   const availability = (): "sign_in" | "unavailable" | null => {
+    if (!source) return "unavailable";
     if (options.access()) return null;
     return options.selfHosted || options.notOffered?.() ? "unavailable" : "sign_in";
   };
   return {
     availability,
+    uploadUrl: source?.uploadUrl,
     async submit(submission: CommunitySubmission): Promise<CommunityResult> {
+      if (!source) return { ok: false, reason: "unavailable", message: "Publishing isn't available here." };
       const access = options.access();
       if (!access) {
         const reason = availability() ?? "unavailable";
-        return { ok: false, reason, message: reason === "sign_in" ? "Sign in to MausBot to publish." : "Publishing isn't available here." };
+        return { ok: false, reason, message: reason === "sign_in" ? `Sign in to ${PRODUCT_NAME} to publish.` : "Publishing isn't available here." };
       }
       const body = JSON.stringify(submission);
       let response: Response;
@@ -73,13 +78,13 @@ export function createCommunityPublisher(options: { access: () => PagesAccess | 
       }
       if (response.status === 401) {
         return access.kind === "desktop"
-          ? { ok: false, reason: "sign_in", message: "Your MausBot sign-in has ended. Sign in again to publish." }
+          ? { ok: false, reason: "sign_in", message: `Your ${PRODUCT_NAME} sign-in has ended. Sign in again to publish.` }
           : { ok: false, reason: "failed", message: UNAVAILABLE };
       }
       if (response.status === 404 || response.status === 501) return { ok: false, reason: "unavailable", message: "Publishing isn't available here." };
       if (response.status === 429) return { ok: false, reason: "failed", message: said(answer, "You've published a lot today. Try again tomorrow.") };
       if (!response.ok) return { ok: false, reason: "failed", message: response.status < 500 || response.status === 503 ? said(answer, UNAVAILABLE) : UNAVAILABLE };
-      const link = communityLink(answer.link), prUrl = communityLink(answer.prUrl);
+      const link = communityLink(answer.link, source.repositoryUrl), prUrl = communityLink(answer.prUrl, source.repositoryUrl);
       return link && prUrl ? { ok: true, link, prUrl } : { ok: false, reason: "failed", message: UNAVAILABLE };
     },
   };

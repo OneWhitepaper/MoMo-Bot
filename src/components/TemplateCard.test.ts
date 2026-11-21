@@ -75,12 +75,14 @@ describe("a template's chat card", () => {
   });
 
   it("offers Save folder… and Upload on GitHub instead of Publish when publishing can't happen here", () => {
-    const signIn = shown({ ...draft, fallback: "sign_in" });
+    const signIn = shown({ ...draft, fallback: "sign_in", uploadUrl: "https://github.com/example/templates/upload/main/teams" });
     expect(signIn).toContain("Save folder…");
     expect(signIn).toContain("Upload on GitHub");
-    expect(signIn).toContain("Sign in to MausBot to publish");
+    expect(signIn).toContain("Sign in to MoMo bot to publish");
     expect(signIn).not.toMatch(/\bPublish\b/);
-    expect(shown({ ...draft, fallback: "unavailable" })).toContain("Publishing isn't available here");
+    const unavailable = shown({ ...draft, fallback: "unavailable" });
+    expect(unavailable).toContain("Publishing isn't available here");
+    expect(unavailable).not.toContain("Upload on GitHub");
   });
 
   it("shows a deleted template without buttons", () => {

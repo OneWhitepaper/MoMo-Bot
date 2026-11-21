@@ -6,6 +6,7 @@
     "lib": ["ES2024", "WebWorker"],
     "strict": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "types": ["./worker-configuration.d.ts", "@cloudflare/vitest-plugin/types", "node"]
   },

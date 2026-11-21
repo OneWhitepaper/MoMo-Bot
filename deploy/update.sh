@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Updates this Docker Compose install to the stable version, with a way back:
+# Updates this MoMo bot server to an explicitly selected image, with a way back:
 #
-#   ./update.sh                  the stable version (the newest release until a first version is made stable)
-#   ./update.sh --version X.Y.Z  one released version
-#   ./update.sh --check          say what would change, and change nothing
+#   ./update.sh --image IMAGE   an image tag or digest
+#   ./update.sh --version X.Y.Z  a release from ghcr.io/onewhitepaper/momo-bot
+#   ./update.sh --check --image IMAGE  preview a change
 #   ./update.sh --rollback       put back the version and the data from before the last update (asks first; --yes)
 #   ./update.sh --allow-older    go ahead when the version asked for is older than, or no newer than, the one running
-#   ./update.sh --dir PATH       the install's folder, when it is not this one (the installer's: /opt/openmausbot)
+#   ./update.sh --dir PATH       the install's folder, when it is not this one (the installer's: /opt/momobot)
 #
 # It runs on the server itself, beside docker-compose.yml, because a server cannot replace its own container. The steps
 # are the ones the MausBot connector runs for a connected server (connector/src/home.ts `update`): download the new
@@ -37,10 +37,10 @@ umask 022
 # update half-way. Output to a terminal that has gone is lost; .update/update.log keeps it.
 trap '' HUP PIPE
 
-REPO="ghcr.io/milind-soni/openmausbot"
-PINNED="^ghcr\.io/milind-soni/openmausbot@sha256:[0-9a-f]{64}$"
-STABLE_URL=${OMB_STABLE_URL:-https://raw.githubusercontent.com/milind-soni/OpenMausBot/channels/stable.json}
-NEWEST_URL=${OMB_NEWEST_URL:-https://api.github.com/repos/milind-soni/OpenMausBot/releases/latest}
+REPO="ghcr.io/onewhitepaper/momo-bot"
+PINNED="^ghcr\.io/onewhitepaper/momo-bot@sha256:[0-9a-f]{64}$"
+STABLE_URL=${OMB_STABLE_URL:-}
+NEWEST_URL=${OMB_NEWEST_URL:-}
 SERVICE=${OMB_UPDATE_SERVICE:-omb}
 # A healthy server answers within seconds of starting; two minutes leaves room for a slow first start after an update,
 # and is how long the server is down before a version that never answers is rolled back. OMB_UPDATE_WAIT_S for more.
@@ -53,8 +53,8 @@ POLL_S=${OMB_UPDATE_POLL_S:-5}
 BY_RUNNER=${OMB_UPDATE_BY_RUNNER:-}
 RUNNER_COPY="com.mausbot.by=runner"
 # The runner's own folder: a person's run here lets the button try again a version it gave up on (update-runner.sh).
-RUNNER_STATE=${OMB_UPDATE_STATE_DIR:-/var/lib/openmausbot-update}
-KEEP_TAG="openmausbot-before-update:local"
+RUNNER_STATE=${OMB_UPDATE_STATE_DIR:-/var/lib/momobot-update}
+KEEP_TAG="momobot-before-update:local"
 BACKUP_ROLE="com.mausbot.role=update-backup"
 
 # The install: --dir, else the folder this script is in when that holds a Compose file, else where the installer
@@ -66,7 +66,7 @@ for arg in "$@"; do
 done
 if [ -z "$DIR" ]; then
   DIR=$(cd "$(dirname "$0")" && pwd)
-  if [ ! -f "$DIR/docker-compose.yml" ] && [ ! -f "$DIR/compose.yaml" ] && [ ! -f "$DIR/podman.unit" ] && [ -f /opt/openmausbot/compose.yaml ]; then DIR=/opt/openmausbot; fi
+  if [ ! -f "$DIR/docker-compose.yml" ] && [ ! -f "$DIR/compose.yaml" ] && [ ! -f "$DIR/podman.unit" ] && [ -f /opt/momobot/compose.yaml ]; then DIR=/opt/momobot; fi
 fi
 STATE="$DIR/.update"
 JOURNAL="$STATE/journal"
@@ -114,7 +114,14 @@ compose() { docker compose "$@"; }
 container() { compose ps -aq "$SERVICE" 2>/dev/null | head -n 1; }
 inspect() { docker inspect -f "$1" "$2" 2>/dev/null; }
 image_id() { docker image inspect -f '{{.Id}}' "$1" 2>/dev/null; }
-published_ref() { docker image inspect -f '{{range .RepoDigests}}{{println .}}{{end}}' "$1" 2>/dev/null | grep "^$REPO@" | head -n 1; }
+published_ref() {
+  local name=${2:-}
+  name=${name%@*}
+  case "${name##*/}" in *:*) name=${name%:*} ;; esac
+  [ -n "$name" ] || name=$REPO
+  docker image inspect -f '{{range .RepoDigests}}{{println .}}{{end}}' "$1" 2>/dev/null |
+    awk -v want="$name" -F@ 'length($2) == 71 && $2 ~ /^sha256:[0-9a-f]+$/ && ($1 == want || $1 == "docker.io/" want || $1 == "docker.io/library/" want) { print; exit }'
+}
 # The released version an image is labelled with; nothing for a build of main, whose label is the branch.
 image_version() { docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$1" 2>/dev/null | sed -n 's/^v\{0,1\}\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$/\1/p'; }
 if [ -n "$UNIT" ]; then
@@ -374,7 +381,7 @@ room_for_copy() { # data backup image → 0 when there is room where the copy go
 # this machine has no digest to pin.
 pin_previous() {
   local named
-  case "$J_previous" in "$REPO@sha256:"*) ;; *) return 0 ;; esac
+  case "$J_previous" in *@sha256:*) ;; *) return 0 ;; esac
   named=$(sed -n 's/^OMB_IMAGE=//p' .env 2>/dev/null | tail -n 1)
   case "$named" in
     *@sha256:* | *:v[0-9]*.[0-9]*.[0-9]*) return 0 ;;
@@ -404,7 +411,7 @@ restore_env() {
 # network then, and stayed in the old, dead one whenever the server restarted without it: HTTPS refused while both
 # containers looked healthy. The installer rewrites its own two files at every run; an update does the same, with the
 # copies below, which are the installer's own (scripts/server-installer.test.ts keeps them equal).
-INSTALLER_MARK="# Written by MausBot's installer (deploy/install.sh)"
+INSTALLER_MARK="# Written by the MoMo bot installer (deploy/install.sh)"
 old_installer_layout() { [ -f compose.yaml ] && grep -qF "$INSTALLER_MARK" compose.yaml && grep -q '^ *network_mode: "service:omb"' compose.yaml; }
 # A Compose file of this repository's (path B) with Caddy in the server's network: `git pull` brings the current one.
 old_repository_layout() { [ -f docker-compose.yml ] && grep -q '^ *network_mode: "service:omb"' docker-compose.yml; }
@@ -415,12 +422,12 @@ move_installer_layout() {
 }
 installer_compose() {
   cat <<'COMPOSE'
-# Written by MausBot's installer (deploy/install.sh), and written again each time it runs: put your own settings in
+# Written by the MoMo bot installer (deploy/install.sh), and written again each time it runs: put your own settings in
 # .env beside this file, which the installer keeps. The server only listens on loopback inside its container, and on
 # two Unix sockets in the `edge` volume, which Caddy, in its own container, reaches it through. A request on a socket is
 # always a remote one to the server. Caddy does not share the server's network: a server that restarted on its own came
 # back in a new one, and left Caddy refusing HTTPS in the old one.
-name: openmausbot
+name: momobot-server
 services:
   omb:
     image: ${OMB_IMAGE:?run the installer again}
@@ -430,10 +437,6 @@ services:
     volumes:
       - ./data:/data
       - edge:/run/openmausbot
-      # The Update server button (update-runner.sh, root's folder): the server leaves a request in the first, reads the
-      # outcome in the second.
-      - /var/lib/openmausbot-update/request:/run/omb-update/request
-      - /var/lib/openmausbot-update/status:/run/omb-update/status:ro
     environment:
       OMB_PORT: "8799"
       OMB_WEBHOOK_PORT: "8800"
@@ -447,7 +450,7 @@ services:
       OMB_SIGNIN_MEMBER_EMAILS:
       OMB_SIGNIN_SMTP_URL:
       OMB_SIGNIN_SMTP_FROM:
-      # "1": phones pair by QR through MausBot Relay. Sign in once: docker compose exec omb openmausbot login --relay
+      OMB_CONTROL_PLANE_URL:
       OMB_PHONE_RELAY:
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8799/api/health | grep -q openmausbot"]
@@ -739,8 +742,6 @@ interrupted() {
   exit 130
 }
 
-# The image and version a plain run takes: the stable channel's, or the newest release before any is stable. Sets
-# CHANNEL, J_target and J_version, or refuses.
 resolve_target() {
   CHANNEL=""
   if [ -n "$WANT_IMAGE" ]; then
@@ -748,7 +749,7 @@ resolve_target() {
   elif [ -n "$WANT_VERSION" ]; then
     J_target="$REPO:v$WANT_VERSION"
     J_version=$WANT_VERSION
-  else
+  elif [ -n "$STABLE_URL" ]; then
     fetch "$STABLE_URL"
     case $? in
       0)
@@ -758,7 +759,7 @@ resolve_target() {
         printf '%s' "$J_target" | grep -Eq "$PINNED" && is_version "$J_version" || refuse "The stable channel names no image this script accepts. Nothing was changed."
         ;;
       1)
-        # No version has been made stable yet: the newest release, as the server's own update check says then.
+        [ -n "$NEWEST_URL" ] || refuse "The configured release channel does not exist. Choose a target with --image IMAGE or --version X.Y.Z."
         fetch "$NEWEST_URL" || refuse "Could not find the newest release ($NEWEST_URL). Nothing was changed. To name a version yourself: ./update.sh --version X.Y.Z"
         J_version=$(printf '%s' "$BODY" | json_top tag_name)
         J_version=${J_version#v}
@@ -768,6 +769,8 @@ resolve_target() {
         ;;
       *) refuse "Could not read the stable channel ($STABLE_URL). Nothing was changed. To name a version yourself: ./update.sh --version X.Y.Z" ;;
     esac
+  else
+    refuse "Choose a target with --image IMAGE or --version X.Y.Z. Nothing was changed."
   fi
 }
 
@@ -794,6 +797,20 @@ while [ $# -gt 0 ]; do
   shift
 done
 if [ -n "$WANT_VERSION" ] && ! is_version "$WANT_VERSION"; then refuse "--version takes a released version such as 0.1.151."; fi
+if [ -n "$WANT_VERSION" ] && [ -n "$WANT_IMAGE" ]; then refuse "Pass either --version or --image."; fi
+case "$WANT_IMAGE" in
+  -*) refuse "--image takes a tag or digest." ;;
+  *[!A-Za-z0-9/:._@-]*) refuse "--image takes a tag or digest." ;;
+esac
+case "${WANT_IMAGE##*/}" in
+  "") ;;
+  *:latest | *:stable) refuse "--image needs a release tag or digest. Do not use a moving tag." ;;
+  *:?*) ;;
+  *) refuse "--image needs a release tag or digest." ;;
+esac
+if [ "$MODE" != rollback ] && [ -z "$WANT_VERSION$WANT_IMAGE$STABLE_URL" ] && [ ! -f "$JOURNAL" ]; then
+  resolve_target
+fi
 
 # update-runner.sh asks what a plain run would take before it runs one: "image version", nothing changed.
 if [ "$MODE" = target ]; then
@@ -842,7 +859,8 @@ CID=$(container)
 if [ -z "$CID" ] && [ -n "$UNIT" ]; then refuse "The server is not running. Start it first: systemctl --user start $SERVER_UNIT"; fi
 [ -n "$CID" ] || refuse "This install has no server yet. Start it once first: docker compose up -d"
 J_previous_id=$(inspect '{{.Image}}' "$CID")
-J_previous=$(published_ref "$J_previous_id")
+previous_ref=$(sed -n 's/^OMB_IMAGE=//p' .env 2>/dev/null | tail -n 1)
+J_previous=$(published_ref "$J_previous_id" "$previous_ref")
 J_previous_version=$(image_version "$J_previous_id")
 J_data=$(inspect '{{range .Mounts}}{{if eq .Destination "/data"}}{{if eq .Type "volume"}}{{.Name}}{{else}}{{.Source}}{{end}}{{end}}{{end}}' "$CID")
 J_project=$(inspect '{{index .Config.Labels "com.docker.compose.project"}}' "$CID")
@@ -872,7 +890,7 @@ older_reason() {
   elif older_than "$J_version" "$RUNNING_VERSION"; then
     printf '%s' "This server runs $RUNNING_VERSION, which is newer than $J_version. An older version may not read what a newer one wrote."
   elif [ "$J_version" = "$RUNNING_VERSION" ] && [ -z "$J_previous_version" ]; then
-    printf '%s' "This server runs a build of main that says $RUNNING_VERSION, and may hold changes made after $J_version was released. It moves to stable by itself once a version newer than $RUNNING_VERSION is stable."
+    printf '%s' "This server runs a build of main that says $RUNNING_VERSION, and may hold changes made after $J_version was released. Choose a release newer than $RUNNING_VERSION."
   fi
 }
 
@@ -891,7 +909,7 @@ if [ "$MODE" = check ]; then
 fi
 
 if [ -z "$J_previous" ] && [ "$REPLACE_BUILD" != yes ]; then
-  refuse "This server runs an image built on this machine (docker compose up --build), with whatever ENGINES you baked into it. To stay on your own build: git pull && docker compose up -d --build. To move to the published image instead: ./update.sh --replace-local-build"
+  refuse "This server runs an image built on this machine (docker compose up --build), with whatever ENGINES you baked into it. To stay on your own build: git pull && docker compose up -d --build. To move to a released image instead: ./update.sh --replace-local-build --image IMAGE"
 fi
 
 J_backup=$(new_backup_name)
@@ -912,7 +930,7 @@ fi
 J_target_id=$(image_id "$J_target")
 case "$J_target" in
   *@sha256:*) ;;
-  *) PUBLISHED=$(published_ref "$J_target_id"); [ -n "$PUBLISHED" ] && J_target=$PUBLISHED ;;
+  *) PUBLISHED=$(published_ref "$J_target_id" "$J_target"); [ -n "$PUBLISHED" ] && J_target=$PUBLISHED ;;
 esac
 [ -n "$J_version" ] || J_version=$(image_version "$J_target_id")
 

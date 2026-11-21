@@ -7,6 +7,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { productLogo } from "@/lib/brand";
+import { DEFAULT_BOT_COLOR, type DefaultBotMark } from "../../shared/default-bot";
 import { cn } from "@/lib/cn";
 import { avatarMarks, type AvatarKind } from "@/lib/avatar-marks";
 import { CHROME_EYES, CHROME_GRADIENT, MAUS_COLORS, type MausColor, type MausMotion, type MausState } from "@/lib/mascot";
@@ -217,6 +219,7 @@ export type BotAvatarProps = Omit<MausAvatarProps, "color" | "gradient"> & {
   readable?: boolean;
   bot: {
     name?: string;
+    defaultBot?: DefaultBotMark;
     color: MausColor;
     avatarUrl?: string | null;
     avatarCrop?: BotAvatarCrop;
@@ -243,6 +246,10 @@ export function resolveBotAvatarOutcome(params: {
   return "flatImage";
 }
 
+export function usesProductAvatar(bot: BotAvatarProps["bot"]): boolean {
+  return Boolean(bot.defaultBot && bot.color === DEFAULT_BOT_COLOR && !bot.avatarUrl && !bot.mascotBody && !bot.mascotFaceColor);
+}
+
 export function BotAvatar({ bot, size = 44, label, readable = false, ...mascotProps }: BotAvatarProps) {
   const profile = botAvatarProfile(bot);
   const festival = useFestivalDress();
@@ -257,6 +264,10 @@ export function BotAvatar({ bot, size = 44, label, readable = false, ...mascotPr
   });
 
   if (outcome !== "flatImage") {
+    if (usesProductAvatar(bot)) {
+      return <img {...avatarMarks("bot", "picture")} src={productLogo()} alt={label ?? bot.name ?? ""}
+        width={size} height={size} draggable={false} className="block shrink-0 rounded-[22%] object-contain" />;
+    }
     return (
       <MausAvatar
         bodyId={wornBody(bot.mascotBody, bot.color, festival)}

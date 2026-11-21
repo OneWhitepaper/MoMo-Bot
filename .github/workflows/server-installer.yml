@@ -1,7 +1,7 @@
 name: Server installer
 
 # The self-hosted server's installer (deploy/install.sh) on a stock ubuntu-24.04 runner, as a person runs it on a fresh
-# server: shellcheck, its checks against made-up servers, then the checks and a real install of the published image
+# server: shellcheck, its checks against made-up servers, then the checks and a real install of a locally built image
 # (deploy/e2e/run.sh). It talks to no production service and needs no secret.
 on:
   pull_request:
@@ -10,7 +10,6 @@ on:
       - deploy/e2e/**
       - deploy/box/**
       - deploy/update.sh
-      - deploy/update-runner.sh
       - connector/profiles/**
       - deploy/Caddyfile
       - deploy/docker-compose.yml
@@ -35,7 +34,7 @@ jobs:
         with:
           persist-credentials: false
       - name: shellcheck
-        run: shellcheck deploy/install.sh deploy/update-runner.sh deploy/e2e/run.sh
+        run: shellcheck deploy/install.sh deploy/e2e/run.sh
       - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -57,20 +56,14 @@ jobs:
             echo "free for Docker now: $(free_gb) GB"
           fi
       - name: This checkout's server image, served from a registry on the runner
-        # Only an image with the hardened profile can run the bots' sandbox; until a release has it, the published
-        # image cannot show the installer turning the sandbox on, so this checkout's is built and installed instead.
         id: image
         run: |
           set -euo pipefail
-          if ! grep -q 'OMB_IMAGE=server' Dockerfile; then
-            echo "this checkout's image has no hardened profile; installing the published release"
-            exit 0
-          fi
           docker run -d --name installer-registry -p 127.0.0.1:5000:5000 registry:2 >/dev/null
-          docker build -q -t localhost:5000/openmausbot:e2e .
-          docker push -q localhost:5000/openmausbot:e2e
-          docker image rm localhost:5000/openmausbot:e2e >/dev/null
-          echo "image=localhost:5000/openmausbot:e2e" >> "$GITHUB_OUTPUT"
+          docker build -q -t localhost:5000/momobot:e2e .
+          docker push -q localhost:5000/momobot:e2e
+          docker image rm localhost:5000/momobot:e2e >/dev/null
+          echo "image=localhost:5000/momobot:e2e" >> "$GITHUB_OUTPUT"
       - name: Check, install, run again and uninstall
         env:
           OUT: ${{ runner.temp }}/server-installer

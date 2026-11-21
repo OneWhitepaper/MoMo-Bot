@@ -3,8 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 const screenshotsSource = fileURLToPath(new URL('../../../docs/screenshots/', import.meta.url));
 const screenshotsTarget = fileURLToPath(new URL('../public/screenshots/', import.meta.url));
-const iconSource = fileURLToPath(new URL('../../../public/app-icon.svg', import.meta.url));
-const iconTarget = fileURLToPath(new URL('../public/app-icon.svg', import.meta.url));
+const icons = ['app-icon-192.png', 'apple-touch-icon.png'];
 
 await mkdir(screenshotsTarget, { recursive: true });
 
@@ -13,4 +12,6 @@ for (const name of await readdir(screenshotsSource)) {
   await copyFile(`${screenshotsSource}/${name}`, `${screenshotsTarget}/${name}`);
 }
 
-await copyFile(iconSource, iconTarget);
+for (const name of icons) {
+  await copyFile(new URL(`../../../public/${name}`, import.meta.url), new URL(`../public/${name}`, import.meta.url));
+}

@@ -3,11 +3,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ANNOUNCEMENTS_URL, type AnnouncementFeed } from "../../shared/announcements.ts";
+import type { AnnouncementFeed } from "../../shared/announcements.ts";
 import {
-  ANNOUNCEMENTS_DISABLE_ENV, ANNOUNCEMENTS_RETRY_MS, ANNOUNCEMENTS_TTL_MS, AnnouncementStore, announcementsCachePath, BUNDLED_ANNOUNCEMENTS,
+  ANNOUNCEMENTS_DISABLE_ENV, ANNOUNCEMENTS_RETRY_MS, ANNOUNCEMENTS_TTL_MS, ANNOUNCEMENTS_URL_ENV, AnnouncementStore, announcementsCachePath, BUNDLED_ANNOUNCEMENTS,
 } from "./feed.ts";
 
+const feedUrl = "https://feed.example.test/announcements.json";
 const NOW = Date.parse("2026-12-01T10:00:00Z");
 const scratch: string[] = [];
 afterEach(() => { for (const dir of scratch.splice(0)) rmSync(dir, { recursive: true, force: true }); });
@@ -23,7 +24,7 @@ const answer = (body: unknown, init: ResponseInit = { status: 200 }) => new Resp
 function subject(options: { fetch?: typeof fetch; dir?: string; env?: NodeJS.ProcessEnv; bundled?: AnnouncementFeed } = {}) {
   let time = NOW;
   const log = vi.fn();
-  const store = new AnnouncementStore({ dataDir: options.dir ?? dataDir(), bundled: options.bundled ?? bundled, now: () => time, log, env: options.env ?? {}, fetch: options.fetch });
+  const store = new AnnouncementStore({ dataDir: options.dir ?? dataDir(), bundled: options.bundled ?? bundled, now: () => time, log, env: { [ANNOUNCEMENTS_URL_ENV]: feedUrl, ...options.env }, fetch: options.fetch });
   return { store, log, advance: (ms: number) => { time += ms; } };
 }
 
@@ -37,6 +38,14 @@ it("bundles the repository's file, and never fetches while switched off", async 
   expect(store.disabled).toBe(true);
 });
 
+it("does not fetch or show announcements without an explicit feed URL", async () => {
+  const fetcher = vi.fn<typeof fetch>();
+  const store = new AnnouncementStore({ dataDir: dataDir(), env: {}, fetch: fetcher });
+  expect(await store.cardsForPage()).toEqual([]);
+  expect(store.disabled).toBe(true);
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
 it("tests never reach the network: the suite switches it off for every server it starts", () => {
   expect(process.env[ANNOUNCEMENTS_DISABLE_ENV]).toBe("1");
 });
@@ -48,7 +57,7 @@ describe("downloading the file", () => {
     const { store } = subject({ fetch: fetchMock as unknown as typeof fetch, dir });
     expect((await store.cardsForPage()).map((entry) => entry.id)).toEqual(["phone-app"]);
     const [url, init] = fetchMock.mock.calls[0]!;
-    expect(url).toBe(ANNOUNCEMENTS_URL);
+    expect(url).toBe(feedUrl);
     expect(init).toMatchObject({ credentials: "omit", referrerPolicy: "no-referrer", redirect: "error" });
     expect(Object.keys(init!.headers as Record<string, string>).sort()).toEqual(["accept", "user-agent"]);
     expect(url).not.toMatch(/[?#]/);

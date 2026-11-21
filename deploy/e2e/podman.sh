@@ -5,8 +5,8 @@
 # back, an update to the next release, an update that cannot start and is rolled back, and an uninstall that keeps the
 # data. It also records whether the bots' sandbox (bubblewrap) can run in a rootless container, and with what.
 # The files the installer places (update.sh) come from this checkout.
-# ONLY ON A THROWAWAY HOST (a CI runner): it writes into this user's ~/.local/share/openmausbot and removes it at the
-# end, and restarts this user's systemd. It refuses to start where a MausBot Podman install already exists, and anywhere
+# ONLY ON A THROWAWAY HOST (a CI runner): it writes into this user's ~/.local/share/momobot and removes it at the
+# end, and restarts this user's systemd. It refuses to start where a MoMo bot Podman install already exists, and anywhere
 # but a CI runner (GITHUB_ACTIONS or CI set to true): it runs sudo.
 #   OUT=<evidence folder> bash deploy/e2e/podman.sh
 set -euo pipefail
@@ -17,15 +17,15 @@ fi
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 OUT=${OUT:-$(mktemp -d)}
 mkdir -p "$OUT"
-REPO=ghcr.io/milind-soni/openmausbot
-OLD_VERSION=${OMB_E2E_OLD_VERSION:-0.1.165}
-NEW_VERSION=${OMB_E2E_NEW_VERSION:-0.1.166}
-DIR="$HOME/.local/share/openmausbot"
-UNIT="$HOME/.config/containers/systemd/openmausbot.container"
+REPO=localhost:5000/momobot-fixture
+OLD_VERSION=${OMB_E2E_OLD_VERSION:-0.1.150}
+NEW_VERSION=${OMB_E2E_NEW_VERSION:-0.1.151}
+DIR="$HOME/.local/share/momobot"
+UNIT="$HOME/.config/containers/systemd/momobot.container"
 INSTALL=(env "OMB_INSTALL_SOURCE=file://$ROOT" sh "$ROOT/deploy/podman/install.sh")
 FINDINGS="$OUT/findings.txt"
 if [ -e "$DIR" ] || [ -e "$UNIT" ]; then
-  echo "This user already has a MausBot Podman install ($DIR or $UNIT). This test replaces and removes it: run it on a throwaway host." >&2
+  echo "This user already has a MoMo bot Podman install ($DIR or $UNIT). This test replaces and removes it: run it on a throwaway host." >&2
   exit 2
 fi
 : >"$FINDINGS"
@@ -34,7 +34,7 @@ step() { printf '\n== %s\n' "$*"; }
 finding() { printf '%s\n' "$*" | tee -a "$FINDINGS"; }
 fail() {
   printf 'FAILED: %s\n' "$*" >&2
-  journalctl --user -u openmausbot -n 120 --no-pager >"$OUT/journal.txt" 2>&1 || true
+  journalctl --user -u momobot -n 120 --no-pager >"$OUT/journal.txt" 2>&1 || true
   tail -n 60 "$OUT/journal.txt" >&2 || true
   exit 1
 }
@@ -50,8 +50,8 @@ healthy_again() {
   done
   fail "the server did not answer again"
 }
-container_id() { podman inspect -f '{{.Id}}' openmausbot 2>/dev/null || true; }
-in_server() { podman exec openmausbot "$@"; }
+container_id() { podman inspect -f '{{.Id}}' momobot 2>/dev/null || true; }
+in_server() { podman exec momobot "$@"; }
 
 step "this host: rootless Podman, and systemd for this user without a login (linger, as a server has it)"
 sudo loginctl enable-linger "$(id -un)"
@@ -64,8 +64,14 @@ if ! grep -q "^$(id -un):" /etc/subuid; then
   sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 "$(id -un)"
   podman system migrate
 fi
+mkdir -p "$HOME/.config/containers/registries.conf.d"
+cat >"$HOME/.config/containers/registries.conf.d/momobot-fixture.conf" <<'CONF'
+[[registry]]
+location = "localhost:5000"
+insecure = true
+CONF
 podman version | tee "$OUT/podman-version.txt"
-# What listens beyond loopback before MausBot: with the host's network, anything the server or Chrome opens is a host port.
+# What listens beyond loopback before MoMo bot: with the host's network, anything the server or Chrome opens is a host port.
 outside() { ss -ltnH | awk '{ print $4 }' | grep -vE '^(127\.[0-9.]+|\[::1\]|\[::ffff:127\.[0-9.]+\]):[0-9]+$' | sort -u; }
 outside >"$OUT/outside-before.txt"
 new_outside() { outside | comm -13 "$OUT/outside-before.txt" -; }
@@ -73,7 +79,7 @@ finding "host: $(sed -n 's/^PRETTY_NAME=//p' /etc/os-release | tr -d '"'), kerne
 finding "host: kernel.apparmor_restrict_unprivileged_userns=$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo absent)"
 
 step "the repository's fake engine, wired into the data folder before the first start"
-fake="$DIR/data/.openmausbot/fake-engine"
+fake="$DIR/data/.momobot/fake-engine"
 mkdir -p "$fake"
 # The fake and every file of server/testing it imports, however that list grows (CI runs this on the merge with main).
 copy_fake() {
@@ -86,11 +92,11 @@ copy_fake() {
 }
 copy_fake fake-claude-cli.ts
 chmod 755 "$fake/fake-claude-cli.ts"
-cat >"$DIR/data/.openmausbot/config.json" <<'JSON'
+cat >"$DIR/data/.momobot/config.json" <<'JSON'
 {
   "features": { "smartSetupChoices": false },
   "instances": {
-    "claude": { "driver": "claudeAgent", "displayName": "E2E fake engine", "config": { "cli": "/data/.openmausbot/fake-engine/fake-claude-cli.ts" } }
+    "claude": { "driver": "claudeAgent", "displayName": "E2E fake engine", "config": { "cli": "/data/.momobot/fake-engine/fake-claude-cli.ts" } }
   }
 }
 JSON
@@ -115,22 +121,22 @@ finding "linger: without it the installer printed 'sudo loginctl enable-linger $
 step "install $OLD_VERSION as this user's service (run again, now with linger)"
 OMB_INSTALL_IMAGE="$REPO:v$OLD_VERSION" "${INSTALL[@]}" >"$OUT/install.txt" 2>&1 || { cat "$OUT/install.txt"; fail "the install failed"; }
 cat "$OUT/install.txt"
-contains "$OUT/install.txt" "MausBot is running as your user's service (openmausbot), on http://127.0.0.1:8799." "the install did not finish"
+contains "$OUT/install.txt" "MoMo bot is running as your user's service (momobot), on http://127.0.0.1:8799." "the install did not finish"
 contains "$OUT/install.txt" "It starts at boot, without anyone logged in." "the install did not see linger"
 grep -q "^Image=$REPO@sha256:[0-9a-f]\{64\}$" "$UNIT" || fail "the unit does not pin the image by digest: $(grep '^Image=' "$UNIT")"
 grep -q "^UserNS=keep-id:uid=[0-9]*,gid=[0-9]*$" "$UNIT" || fail "the unit does not map the image's user to this one"
-cp "$UNIT" "$OUT/openmausbot.container"
+cp "$UNIT" "$OUT/momobot.container"
 /usr/libexec/podman/quadlet -dryrun -user >"$OUT/quadlet-dryrun.txt" 2>&1 || true
-contains "$OUT/quadlet-dryrun.txt" "---openmausbot.service---" "quadlet did not make the service"
-systemctl --user is-active --quiet openmausbot || fail "the service is not active"
+contains "$OUT/quadlet-dryrun.txt" "---momobot.service---" "quadlet did not make the service"
+systemctl --user is-active --quiet momobot || fail "the service is not active"
 healthy || fail "the server does not answer on 127.0.0.1:8799"
 # The health check reads the port in the container when it runs (server.env's OMB_PORT): systemd made the unit's $$ one $.
-health_test=$(podman inspect -f '{{json .Config.Healthcheck.Test}}' openmausbot)
+health_test=$(podman inspect -f '{{json .Config.Healthcheck.Test}}' momobot)
 # shellcheck disable=SC2016 # the literal text the check must hold
 grep -qF '${OMB_PORT:-8799}/api/health' <<<"$health_test" || fail "the health check does not read OMB_PORT when it runs: $health_test"
 # The mark the app knows this install by (its update command): the folder, as this user writes it.
 # shellcheck disable=SC2016,SC2088 # read in the container; the ~ is text
-[ "$(in_server sh -c 'printf %s "$OMB_PODMAN_SERVICE"')" = "~/.local/share/openmausbot" ] || fail "the server does not see OMB_PODMAN_SERVICE=~/.local/share/openmausbot"
+[ "$(in_server sh -c 'printf %s "$OMB_PODMAN_SERVICE"')" = "~/.local/share/momobot" ] || fail "the server does not see OMB_PODMAN_SERVICE=~/.local/share/momobot"
 ss -ltnH >"$OUT/listening.txt"
 grep -q "127.0.0.1:8799 " "$OUT/listening.txt" || fail "nothing listens on 127.0.0.1:8799: $(cat "$OUT/listening.txt")"
 [ -z "$(new_outside)" ] || fail "the server listens beyond this machine without --lan: $(new_outside)"
@@ -149,8 +155,8 @@ contains "$OUT/install-again.txt" "the one already installed" "the second run di
 finding "idempotent: a second run kept the version and did not restart the server"
 
 step "a bot turn with the fake engine"
-in_server openmausbot new-bot Probe --json >"$OUT/new-bot.json" 2>"$OUT/new-bot.err" || { cat "$OUT/new-bot.json" "$OUT/new-bot.err"; fail "new-bot failed"; }
-in_server openmausbot run Probe "hello from the podman e2e" --json --timeout 2m >"$OUT/run.json" 2>"$OUT/run.err" || { cat "$OUT/run.json" "$OUT/run.err"; fail "the turn failed"; }
+in_server momobot new-bot Probe --json >"$OUT/new-bot.json" 2>"$OUT/new-bot.err" || { cat "$OUT/new-bot.json" "$OUT/new-bot.err"; fail "new-bot failed"; }
+in_server momobot run Probe "hello from the podman e2e" --json --timeout 2m >"$OUT/run.json" 2>"$OUT/run.err" || { cat "$OUT/run.json" "$OUT/run.err"; fail "the turn failed"; }
 contains "$OUT/run.json" "hello from fake claude" "the turn did not answer with the fake engine's reply"
 finding "turn: new-bot + run answered \"hello from fake claude\" through the server in the rootless container"
 
@@ -160,7 +166,7 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory "$(mktemp -d)" >/dev/nu
 page_server=$!
 if in_server sh -c 'agent-browser open "data:text/html,<title>podman-e2e</title>" >/dev/null && agent-browser get title' >"$OUT/chrome.txt" 2>&1 &&
   grep -q podman-e2e "$OUT/chrome.txt"; then
-  podman top openmausbot args | awk 'tolower($0) ~ /chrom/ && n < 3 { print; n++ }' >"$OUT/chrome-argv.txt" || true
+  podman top momobot args | awk 'tolower($0) ~ /chrom/ && n < 3 { print; n++ }' >"$OUT/chrome-argv.txt" || true
   in_server agent-browser open http://127.0.0.1:8765/ >>"$OUT/chrome.txt" 2>&1 || fail "the browser did not load a page over http"
   [ -z "$(new_outside)" ] || fail "with Chrome open, something listens beyond this machine: $(new_outside)"
   in_server agent-browser close >/dev/null 2>&1 || true
@@ -205,13 +211,13 @@ podman rmi -f localhost/omb-box-probe:e2e >/dev/null 2>&1 || true
 
 step "a server that is killed is started again by systemd"
 before=$(container_id)
-launcher=$(podman top openmausbot hpid args | awk '/server-launcher/ { print $1; exit }')
+launcher=$(podman top momobot hpid args | awk '/server-launcher/ { print $1; exit }')
 [ -n "$launcher" ] || fail "no server process to kill"
 kill -9 "$launcher"
 for _ in $(seq 1 40); do [ "$(container_id)" != "$before" ] && [ -n "$(container_id)" ] && break; sleep 2; done
 healthy_again
 [ "$(container_id)" != "$before" ] || fail "the killed server was not started again"
-finding "restart: kill -9 of server-launcher; systemd started a new container ($(systemctl --user show -p NRestarts --value openmausbot) restart(s)) and it answered"
+finding "restart: kill -9 of server-launcher; systemd started a new container ($(systemctl --user show -p NRestarts --value momobot) restart(s)) and it answered"
 
 step "a server that stops answering is stopped by its health check and started again"
 before=$(container_id)
@@ -219,16 +225,16 @@ before=$(container_id)
 server=$(ss -ltnpH "( sport = :8799 )" | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -n 1)
 [ -n "$server" ] || fail "no server process to pause"
 # Past the health check's start period first: failures inside it do not count.
-for _ in $(seq 1 60); do [ "$(podman inspect -f '{{.State.Health.Status}}' openmausbot)" = healthy ] && break; sleep 5; done
-[ "$(podman inspect -f '{{.State.Health.Status}}' openmausbot)" = healthy ] ||
-  fail "the health check never passed: $(podman inspect -f '{{json .State.Health}}' openmausbot 2>&1 | head -c 600)"
+for _ in $(seq 1 60); do [ "$(podman inspect -f '{{.State.Health.Status}}' momobot)" = healthy ] && break; sleep 5; done
+[ "$(podman inspect -f '{{.State.Health.Status}}' momobot)" = healthy ] ||
+  fail "the health check never passed: $(podman inspect -f '{{json .State.Health}}' momobot 2>&1 | head -c 600)"
 finding "health: the check ran in the container as $health_test, and passed"
-podman inspect -f '{{.State.Health.Status}} {{json .Config.Healthcheck}} {{.Config.HealthcheckOnFailureAction}}' openmausbot >"$OUT/health-before.txt" 2>&1 || true
+podman inspect -f '{{.State.Health.Status}} {{json .Config.Healthcheck}} {{.Config.HealthcheckOnFailureAction}}' momobot >"$OUT/health-before.txt" 2>&1 || true
 systemctl --user list-timers --all --no-pager >"$OUT/timers.txt" 2>&1 || true
 kill -STOP "$server"
 for _ in $(seq 1 100); do [ -n "$(container_id)" ] && [ "$(container_id)" != "$before" ] && break; sleep 3; done
 if [ "$(container_id)" = "$before" ]; then
-  podman inspect -f '{{json .State.Health}}' openmausbot >"$OUT/health-after.json" 2>&1 || true
+  podman inspect -f '{{json .State.Health}}' momobot >"$OUT/health-after.json" 2>&1 || true
   kill -CONT "$server" 2>/dev/null || true
   fail "the health check did not restart a server that stopped answering: $(cat "$OUT/health-before.txt"); $(head -c 600 "$OUT/health-after.json"); timers: $(grep -c "$before" "$OUT/timers.txt" || true)"
 fi
@@ -239,7 +245,7 @@ step "a restart of this user's systemd (what a boot does, with linger) starts it
 sudo systemctl restart "user@$(id -u).service"
 for _ in $(seq 1 30); do systemctl --user show-environment >/dev/null 2>&1 && break; sleep 1; done
 healthy_again
-systemctl --user is-active --quiet openmausbot || fail "the service did not start with the user's systemd"
+systemctl --user is-active --quiet momobot || fail "the service did not start with the user's systemd"
 finding "boot: after systemctl restart user@$(id -u).service the service came back by itself (WantedBy=default.target)"
 
 step "--lan: other devices on this network reach it, and must pair; --local takes it back"
@@ -247,7 +253,7 @@ step "--lan: other devices on this network reach it, and must pair; --local take
 healthy_again
 address=$(ip -4 -o route get 1.1.1.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')
 # The pairing command the installer prints, without a terminal: a code, and a link on this network's address.
-in_server openmausbot pair >"$OUT/pair-lan.txt" 2>&1 || { cat "$OUT/pair-lan.txt"; fail "pair failed"; }
+in_server momobot pair >"$OUT/pair-lan.txt" 2>&1 || { cat "$OUT/pair-lan.txt"; fail "pair failed"; }
 contains "$OUT/pair-lan.txt" "http://$address:8799/pair#code=" "pair did not give a link on this network's address"
 ss -ltnH | grep -qE "(0\.0\.0\.0|\*):8799 " || fail "the server does not listen beyond loopback with --lan"
 ss -ltnH | grep -E ":8800 " >"$OUT/lan-8800.txt" || true
@@ -259,19 +265,19 @@ from_here=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.
 healthy_again
 [ -z "$(new_outside)" ] || fail "--local left something listening beyond loopback: $(new_outside)"
 finding "lan: webhook port with --lan: $(awk '{ print $4 }' "$OUT/lan-8800.txt" | tr '\n' ' ')"
-finding "pair: under --lan, openmausbot pair in the container gave a code and a link on http://$address:8799"
+finding "pair: under --lan, momobot pair in the container gave a code and a link on http://$address:8799"
 finding "lan: with --lan, $address got $from_lan and 127.0.0.1 got $from_here on /api/bots; --local went back to loopback"
 
 step "update to $NEW_VERSION, through update.sh"
-"$DIR/update.sh" --version "$NEW_VERSION" >"$OUT/update.txt" 2>&1 || { cat "$OUT/update.txt"; fail "the update failed"; }
+"$DIR/update.sh" --image "$REPO:v$NEW_VERSION" >"$OUT/update.txt" 2>&1 || { cat "$OUT/update.txt"; fail "the update failed"; }
 cat "$OUT/update.txt"
 contains "$OUT/update.txt" "Updated from $OLD_VERSION to $NEW_VERSION." "the update did not finish"
 new_image=$(sed -n 's/^Image=//p' "$UNIT")
 { [ "$new_image" != "$image" ] && grep -qx "OMB_IMAGE=$new_image" "$DIR/.env"; } || fail "the unit and .env do not name the new image"
-[ "$(podman inspect -f '{{.Image}}' openmausbot)" = "$(podman image inspect -f '{{.Id}}' "$new_image")" ] || fail "the server does not run the new image"
+[ "$(podman inspect -f '{{.Image}}' momobot)" = "$(podman image inspect -f '{{.Id}}' "$new_image")" ] || fail "the server does not run the new image"
 in_server sh -c 'curl -sf http://127.0.0.1:8799/.well-known/openmausbot/environment' | grep -q "\"version\":\"$NEW_VERSION\"" || fail "the server does not say it is $NEW_VERSION"
-in_server openmausbot bots --json | grep -q Probe || fail "the bot made before the update is gone"
-podman volume ls -q | grep -q "^openmausbot_data-before-update-" || fail "no copy of the data was kept"
+in_server momobot bots --json | grep -q Probe || fail "the bot made before the update is gone"
+podman volume ls -q | grep -q "^momobot_data-before-update-" || fail "no copy of the data was kept"
 finding "update: $OLD_VERSION -> $NEW_VERSION by digest, data copied to a Podman volume first, the bot made before it still there"
 
 step "an update to a version that cannot start is rolled back"
@@ -285,7 +291,7 @@ contains "$OUT/update-broken.txt" "did not work: it stopped as it started (broke
 contains "$OUT/update-broken.txt" "Your server runs $NEW_VERSION again, with its data as it was before the update." "the broken update was not rolled back"
 [ "$(sed -n 's/^Image=//p' "$UNIT")" = "$new_image" ] || fail "the unit does not name $NEW_VERSION again"
 healthy_again
-in_server openmausbot bots --json | grep -q Probe || fail "the bot is gone after the rollback"
+in_server momobot bots --json | grep -q Probe || fail "the bot is gone after the rollback"
 finding "rollback: an image that exits at start was rolled back to $NEW_VERSION with its data; the service answers"
 podman rmi -f localhost/omb-broken:e2e >/dev/null 2>&1 || true
 
@@ -293,13 +299,13 @@ step "uninstall keeps the data"
 "${INSTALL[@]}" --uninstall >"$OUT/uninstall.txt" 2>&1 || { cat "$OUT/uninstall.txt"; fail "the uninstall failed"; }
 cat "$OUT/uninstall.txt"
 [ ! -e "$UNIT" ] || fail "the unit is still there"
-if systemctl --user is-active --quiet openmausbot; then fail "the service still runs"; fi
+if systemctl --user is-active --quiet momobot; then fail "the service still runs"; fi
 if healthy; then fail "the server still answers"; fi
-[ -f "$DIR/data/.openmausbot/config.json" ] || fail "the uninstall removed the data"
+[ -f "$DIR/data/.momobot/config.json" ] || fail "the uninstall removed the data"
 finding "uninstall: the service and its unit are gone, the data stays"
 
 step "clean up"
-podman volume ls -q | grep "^openmausbot_data-before-update-" | xargs -r podman volume rm -f >/dev/null
+podman volume ls -q | grep "^momobot_data-before-update-" | xargs -r podman volume rm -f >/dev/null
 podman unshare rm -rf "$DIR"
 podman image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}' | tee "$OUT/images.txt"
 echo

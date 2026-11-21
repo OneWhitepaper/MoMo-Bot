@@ -4,7 +4,7 @@ import { addTemplate } from "@/lib/template-add";
 import { templateDetailsOf } from "@/lib/template-details";
 import { orgCardAction, orgPackagePreview, type OrgLibraryListing, type OrgLibraryPackage } from "@/lib/org-library";
 import type { PackageDocument } from "../../shared/package-format";
-import { COMMUNITY_REPOSITORY_URL, type TemplateDetails } from "../../shared/share-card";
+import type { TemplateDetails } from "../../shared/share-card";
 import type { Routine } from "@/lib/routines";
 import { openExternalLink } from "@/lib/app-links";
 import { api, useStore, type Bot, type Group } from "@/state/store";
@@ -217,6 +217,7 @@ export function TeamLibraryPanel({
   };
 
   const normalizedSearch = search.trim().toLowerCase();
+  const repositoryUrl = catalog?.repositoryUrl;
   const visibleTeams = (catalog?.teams ?? []).filter((entry) => !normalizedSearch || catalogMatches(entry, normalizedSearch));
   const primary = "flex shrink-0 items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 text-[14px] font-medium text-accent-ink hover:bg-accent/90 disabled:opacity-60";
 
@@ -254,9 +255,9 @@ export function TeamLibraryPanel({
             {!pending && <p className="mt-1 text-[13px] text-ink-secondary">{t("templates.subtitle")}</p>}
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            {!pending && (
+            {!pending && repositoryUrl && (
               <button
-                onClick={() => void openExternalLink(catalog?.repositoryUrl || COMMUNITY_REPOSITORY_URL).catch(() => {})}
+                onClick={() => void openExternalLink(repositoryUrl).catch(() => {})}
                 className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[13px] text-ink-secondary hover:bg-raised hover:text-ink"
                 title={t("templates.openRepository")}
               >
@@ -331,9 +332,9 @@ export function TeamLibraryPanel({
                 </section>
               )}
               <ReadyBotGallery search={search} onDialog={setNestedDialog} onAdded={onClose} />
-              <div className="mb-3 text-[12px] font-medium text-ink-tertiary">
+              {repositoryUrl && <div className="mb-3 text-[12px] font-medium text-ink-tertiary">
                 {search ? t("templates.searchResults") : t("templates.communityTemplates")}
-              </div>
+              </div>}
               {error && <div role="alert" className="mb-3 rounded-lg bg-danger/10 px-3 py-2 text-[13px] text-danger">{error}</div>}
               {catalogLoading && (
                 <div className="flex items-center justify-center gap-2 py-24 text-[13px] text-ink-secondary">
@@ -346,7 +347,7 @@ export function TeamLibraryPanel({
                   <button onClick={() => void loadCatalog()} className="mt-3 rounded-full bg-raised px-3.5 py-2 text-ink hover:bg-raised-hover">{t("common.tryAgain")}</button>
                 </div>
               )}
-              {!catalogLoading && catalog && (
+              {!catalogLoading && catalog && repositoryUrl && (
                 <div className="grid grid-cols-1 gap-x-10 md:grid-cols-2">
                   {visibleTeams.map((entry) => {
                     const copy = catalogCopy(entry);
@@ -378,7 +379,7 @@ export function TeamLibraryPanel({
                   })}
                 </div>
               )}
-              {!catalogLoading && catalog && visibleTeams.length === 0 && (
+              {!catalogLoading && repositoryUrl && visibleTeams.length === 0 && (
                 <div className="flex min-h-56 flex-col items-center justify-center text-center">
                   <div className="text-[13px] font-medium text-ink">{t("templates.noneFound")}</div>
                   <div className="mt-1 text-[13px] text-ink-secondary">{t("templates.tryDifferentSearch")}</div>

@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { PRODUCT_NAME } from "../../shared/product-brand.ts";
 import { credentialIsConfigured, CREDENTIAL_TARGETS, PROVIDER_CREDENTIAL_TARGETS, type CredentialConfig, type CredentialTargetId } from "../../shared/credential-request.ts";
 import { WINDOW_PREFS, type WindowPrefId } from "../../shared/app-settings.ts";
 import { defaultBotThreads, MAX_CONCURRENT_BOT_THREADS } from "../bot-thread-limits.ts";
@@ -235,7 +236,7 @@ export function createSettingsRegistry(deps: RegistryDeps): SettingEntry[] {
   ];
 
   const provider = (id: string, label: string, synonyms: string[], current: () => string | undefined, patch: (text: string) => Record<string, unknown>): SettingEntry => writable({
-    id, label, help: `${label}: the address MausBot sends requests to. Empty uses the provider's own.`, where: "keys", synonyms: [...synonyms, "url", "base url", "endpoint", "address", "proxy"],
+    id, label, help: `${label}: the address ${PRODUCT_NAME} sends requests to. Empty uses the provider's own.`, where: "keys", synonyms: [...synonyms, "url", "base url", "endpoint", "address", "proxy"],
     value: url, allowed: "an http(s) address, or empty to clear", current: () => current() ?? "", write: config(patch),
   });
   const providers: SettingEntry[] = [
@@ -311,7 +312,7 @@ export function createSettingsRegistry(deps: RegistryDeps): SettingEntry[] {
 
   const ownerOnly = (id: string, label: string, help: string, where: Where, synonyms: string[], read: () => string): SettingEntry => ({ id, label, help, where, synonyms, tier: "owner-only", read });
   const owner: SettingEntry[] = [
-    ownerOnly("cloud.account", "MausBot Cloud account", "The account this app is signed in with, and its plan.", "account", ["account", "sign in", "sign out", "plan", "billing", "subscription"], () => "managed in Settings"),
+    ownerOnly("cloud.account", "Cloud account", "The account this app is signed in with, and its plan.", "account", ["account", "sign in", "sign out", "plan", "billing", "subscription"], () => "managed in Settings"),
     ownerOnly("vault.logins", "Vault and logins", "Saved website logins and secrets bots may use.", "vault", ["vault", "password", "passwords", "login", "logins", "1password"], () => "managed in Settings"),
     ownerOnly("data.backups", "Backups", "Making a backup (it takes a password), restoring or deleting one, and the daily company backup (it takes a typed confirmation).", "backup-export",
       ["backup", "backups", "restore", "export", "import", "schedule"], () => "managed in Settings"),
@@ -323,7 +324,7 @@ export function createSettingsRegistry(deps: RegistryDeps): SettingEntry[] {
       ["keep here", "move to cloud", "move back", "bring back"], () => "managed in Settings"),
     ownerOnly("appearance.sidebarPicture", "Sidebar picture", "The picture at the top of the sidebar; it is a file the person picks or removes.", "sidebar-picture",
       ["wallpaper", "background", "banner", "sidebar image", "picture"], () => "managed in Settings"),
-    ownerOnly("account.organization", "Organization", "Joining or leaving a company's managed MausBot; it signs in through the company's portal.", "organization",
+    ownerOnly("account.organization", "Organization", "Join or leave a company-managed deployment through the company’s sign-in portal.", "organization",
       ["organization", "organisation", "company", "managed"], () => "managed in Settings"),
     ownerOnly("people.signIn", "Who may sign in", "On a self-hosted server, the emails or @domains that may sign in, as admins or members. A change could lock someone out, or hand every setting to someone new.",
       "members", ["people", "members", "invite", "roles", "admins", "sign in access"], () => "managed in Settings"),

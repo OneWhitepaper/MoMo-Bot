@@ -9,6 +9,7 @@ import {
   MANIFEST_ON_DEMAND_TTL_MS,
   MANIFEST_RETRY_MS,
   MANIFEST_TTL_MS,
+  MANIFEST_URL_ENV,
   ModelManifestStore,
   modelManifestCachePath,
   withCliVersionGate,
@@ -47,14 +48,14 @@ function json(body: unknown, init: ResponseInit = { status: 200 }): Response {
 }
 
 function store(options: Partial<ConstructorParameters<typeof ModelManifestStore>[0]> & { fetch?: typeof fetch; dir?: string } = {}) {
-  const { dir = dataDir(), ...rest } = options;
+  const { dir = dataDir(), env, ...rest } = options;
   const log = vi.fn();
   let time = NOW;
   return {
     dir,
     log,
     advance: (ms: number) => { time += ms; },
-    manifest: new ModelManifestStore({ dataDir: dir, bundled, now: () => time, log, env: {}, ...rest }),
+    manifest: new ModelManifestStore({ dataDir: dir, bundled, now: () => time, log, env: { [MANIFEST_URL_ENV]: "https://models.example.test/models.json", ...env }, ...rest }),
   };
 }
 
@@ -63,6 +64,13 @@ function writeCache(dir: string, data: unknown, fetchedAtMs = NOW - 1000): void 
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify({ fetchedAtMs, manifest: data }));
 }
+
+it("uses the bundled model list on refresh without an explicit download URL", async () => {
+  const fetcher = vi.fn<typeof fetch>();
+  const store = new ModelManifestStore({ dataDir: dataDir(), env: {}, bundled, fetch: fetcher });
+  expect(await store.refreshOnDemand()).toEqual(bundled);
+  expect(fetcher).not.toHaveBeenCalled();
+});
 
 describe("reading the current list", () => {
   it("starts from the bundled copy and never touches the network", () => {

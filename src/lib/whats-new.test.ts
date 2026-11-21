@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CloudAccountState } from "../../electron/cloud-account.mjs";
 import type { CloudOffer } from "../../electron/cloud-home.mjs";
 import type { CloudListEntry } from "../../electron/cloud-list.mjs";
@@ -23,6 +23,7 @@ const team = { id: "t1", name: "Design Studio", role: "member" as const, machine
 const running = { state: "active" as const, tier: "pro", endsAt: NOW + DAY, amount: 4900, chargeAt: NOW + DAY, holdUntil: null, deleteAt: null, keep: "none" as const };
 
 beforeEach(() => { setLocale("en"); vi.mocked(track).mockClear(); });
+afterEach(() => vi.unstubAllEnvs());
 
 describe("who sees which slides", () => {
   it("no Cloud plan: the new Cloud, then Team; signed out or signed in with none, an ended Cloud of their own included", () => {
@@ -99,12 +100,23 @@ describe("the slides' plans, from the Admin's offer", () => {
 
 describe("the funnel", () => {
   it("each slide's links carry its own source tag, to the Cloud website or the staging Admin's", () => {
+    vi.stubEnv("VITE_MOMO_CLOUD_URL", "https://cloud.example.test");
+    vi.stubEnv("VITE_MOMO_CLOUD_STAGING_URL", "https://staging.example.test");
     expect(WHATS_NEW_SOURCES).toEqual({ pro: "app_whats_new_pro", team: "app_whats_new_team" });
-    expect(newCloudUrl()).toBe("https://cloud.openmausbot.com/cloud?src=app_whats_new_pro");
-    expect(startTeamUrl()).toBe("https://cloud.openmausbot.com/pro/buy?plan=team&src=app_whats_new_team");
-    expect(newCloudUrl(true)).toBe("https://omb-cloud-staging.fly.dev/cloud?src=app_whats_new_pro");
-    expect(startTeamUrl(true)).toBe("https://omb-cloud-staging.fly.dev/pro/buy?plan=team&src=app_whats_new_team");
+    expect(newCloudUrl()).toBe("https://cloud.example.test/cloud?src=app_whats_new_pro");
+    expect(startTeamUrl()).toBe("https://cloud.example.test/pro/buy?plan=team&src=app_whats_new_team");
+    expect(newCloudUrl(true)).toBe("https://staging.example.test/cloud?src=app_whats_new_pro");
+    expect(startTeamUrl(true)).toBe("https://staging.example.test/pro/buy?plan=team&src=app_whats_new_team");
     for (const tag of Object.values(WHATS_NEW_SOURCES)) expect(tag, "the Admin's tag form").toMatch(/^[a-z0-9_]{1,32}$/);
+  });
+
+  it("offers no checkout or marketing links without an explicit cloud URL", () => {
+    vi.stubEnv("VITE_MOMO_CLOUD_URL", undefined);
+    vi.stubEnv("VITE_MOMO_CLOUD_STAGING_URL", undefined);
+    for (const staging of [false, true]) {
+      expect(newCloudUrl(staging)).toBeNull();
+      expect(startTeamUrl(staging)).toBeNull();
+    }
   });
 
   it("counts each step with its slide, who it was for and the campaign; never an email, a name or an address", () => {

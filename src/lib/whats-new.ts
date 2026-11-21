@@ -2,6 +2,7 @@ import type { CloudAccountState } from "../../electron/cloud-account.mjs";
 import type { CloudOffer } from "../../electron/cloud-home.mjs";
 import { CLOUD_TEAM_TIERS } from "../../electron/cloud-team-plan.mjs";
 import { track } from "@/lib/analytics";
+import { configuredCloudPage, withSource } from "@/lib/app-links";
 import { cloudPlanView, moneyBackShort, offerPlanLabel, trialRunning, trialTerms, usd } from "@/lib/cloud-plan";
 import { t } from "@/lib/i18n";
 import { WHATS_NEW_NOTICE } from "@/lib/notices";
@@ -13,12 +14,18 @@ export type WhatsNewAudience = "none" | "own" | "team" | "other";
 
 /** Each slide's tag on the Cloud's funnel: `src` on its links, and `source` on the checkout the app opens from it. */
 export const WHATS_NEW_SOURCES = { pro: "app_whats_new_pro", team: "app_whats_new_team" } as const satisfies Record<WhatsNewSlide, string>;
-const CLOUD_SITE = "https://cloud.openmausbot.com", STAGING_SITE = "https://omb-cloud-staging.fly.dev";
+export function newCloudUrl(staging = false): string | null {
+  const page = configuredCloudPage(staging);
+  return page ? withSource(page, WHATS_NEW_SOURCES.pro) : null;
+}
 
-/** The Cloud website's Home, which shows the plans to someone without one; `src` on /cloud opens that page. */
-export const newCloudUrl = (staging = false) => `${staging ? STAGING_SITE : CLOUD_SITE}/cloud?src=${WHATS_NEW_SOURCES.pro}`;
-/** The Team plan's checkout, as the website's Get Team opens it: its free trial while the Admin offers one. */
-export const startTeamUrl = (staging = false) => `${staging ? STAGING_SITE : CLOUD_SITE}/pro/buy?plan=team&src=${WHATS_NEW_SOURCES.team}`;
+export function startTeamUrl(staging = false): string | null {
+  const page = configuredCloudPage(staging);
+  if (!page) return null;
+  const buy = new URL("/pro/buy", page);
+  buy.searchParams.set("plan", "team");
+  return withSource(buy.href, WHATS_NEW_SOURCES.team);
+}
 
 const listedCloud = (account: CloudAccountState, team: boolean) =>
   (account.clouds ?? []).some(cloud => cloud.managed !== false && cloud.status !== "ended" && (cloud.teamId !== null) === team);

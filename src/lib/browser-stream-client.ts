@@ -1,3 +1,4 @@
+import { DOCS_SOURCE } from "@/lib/app-links";
 // Adapted from pingdotgg/t3code@00cdceb1 packages/client-runtime/src/preview/serverBrowserStream.ts, MIT License,
 // Copyright (c) 2026 T3 Tools Inc. (full text in third_party/t3-code/LICENSE); modified: OpenMausBot's routes and
 // access, a viewer that may operate sizes the page while it only watches, a larger frame cap is sent in place and a
@@ -15,11 +16,11 @@ export type PreviewStreamHostSetup =
   | { readonly need: "libraries" | "container"; readonly command: string };
 
 /** The server's LIBRARIES_COMMAND and SANDBOX_STEPS_URL: a close reason is too short to carry the link. */
-export const PREVIEW_STREAM_LIBRARIES_COMMAND = "sudo openmausbot browser install --with-deps";
+export const PREVIEW_STREAM_LIBRARIES_COMMAND = "sudo momobot browser install --with-deps";
 /** What a container's operator sets to run its browser without Chrome's own sandbox. */
 export const PREVIEW_STREAM_SANDBOX_OFF = "OMB_BROWSER_SANDBOX=0";
 export const PREVIEW_STREAM_SANDBOX_STEPS_URL =
-  "https://github.com/milind-soni/OpenMausBot/blob/main/docs/deploy-vps.md#ubuntu-2404-browser-sandbox";
+  `${DOCS_SOURCE}/deploy-vps.md#ubuntu-2404-browser-sandbox`;
 
 export type PreviewViewportSetting =
   | { readonly mode: "fill" }
@@ -560,5 +561,5 @@ export const previewStreamHostSetupMessage = (setup: PreviewStreamHostSetup) =>
   setup.need === "sandbox"
     ? "This server's host blocks the sandbox its browser runs in. An administrator can allow it for one copy of Chrome with these steps, then try again:"
     : setup.need === "container"
-    ? "Chrome's sandbox can't start in this server's container. Its operator can set this to run the browser without it and rely on the container's isolation, then restart OpenMausBot:"
+    ? "Chrome's sandbox can't start in this server's container. Its operator can set this to run the browser without it and rely on the container's isolation, then restart MoMo bot:"
     : "This server's host is missing libraries its browser needs. Run this once on the host, then try again:";

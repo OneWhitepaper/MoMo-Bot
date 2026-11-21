@@ -5,12 +5,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import nativeText from "./native-text.cjs";
 import { accessToken, fixture, until } from "./fixtures/cloud-account.mjs";
-import { cancelSurvey, CHECKOUT_SOURCES, checkoutDestination, cloudMenuSublabel, createCloudAccountStore, cloudOrigin, cloudPlanSnapshot, CLOUD_ORIGIN } from "./cloud-account.mjs";
+import { cancelSurvey, CHECKOUT_SOURCES, checkoutDestination, cloudMenuSublabel, createCloudAccountStore, cloudOrigin, cloudPlanSnapshot } from "./cloud-account.mjs";
 
 
-test("Cloud origin is fixed; only explicit fixtures can use loopback", () => {
-  assert.equal(cloudOrigin(), CLOUD_ORIGIN);
-  for (const value of ["https://attacker.example.test", "http://127.0.0.1:1234", `${CLOUD_ORIGIN}/`, `${CLOUD_ORIGIN}/?paid=true`]) assert.throws(() => cloudOrigin(value));
+test("the Cloud client trusts only its configured origin or explicit loopback fixtures", () => {
+  const own = "https://cloud.example.test";
+  assert.throws(() => cloudOrigin());
+  assert.equal(cloudOrigin(own, false, own), own);
+  for (const value of ["https://attacker.example.test", "http://127.0.0.1:1234", `${own}/`, `${own}/?paid=true`]) {
+    assert.throws(() => cloudOrigin(value, false, own));
+  }
   assert.equal(cloudOrigin("http://127.0.0.1:1234", true), "http://127.0.0.1:1234");
   assert.throws(() => cloudOrigin("https://attacker.example.test", true));
 });

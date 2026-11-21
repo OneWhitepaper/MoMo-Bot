@@ -592,10 +592,10 @@ describe("thread control placement", () => {
     fixture.localMessage = "Screen Recording required";
     window.ogb = { platform: "darwin", permOpenSettings: vi.fn(), relaunch: vi.fn() } as unknown as NonNullable<Window["ogb"]>;
     const screen = renderToStaticMarkup(createElement(ErrorRow, {
-      message: "OpenMausBot can't use this computer yet — embedded host failed: Screen Recording required. Relaunch OpenMausBot after granting any missing macOS permission.",
+      message: "MoMo bot can't use this computer yet — embedded host failed: Screen Recording required. Relaunch MoMo bot after granting any missing macOS permission.",
     }));
     expect(screen).toContain("Open Screen Recording Settings");
-    expect(screen).toContain("Relaunch OpenMausBot");
+    expect(screen).toContain("Relaunch MoMo bot");
     expect(screen).not.toContain("Open Accessibility Settings");
     fixture.localMessage = "Accessibility required";
     const accessibility = renderToStaticMarkup(createElement(ErrorRow, {

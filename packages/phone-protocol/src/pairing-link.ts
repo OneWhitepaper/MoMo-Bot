@@ -1,6 +1,4 @@
-// The one `openmausbot://pair` link builder, read by the Android and iOS
-// scanners (`PairingInvite.parse`). Every value is written with
-// encodeURIComponent, so a space is `%20`.
+import { PRODUCT_URL_SCHEME } from "./product-brand.ts";
 
 export type CompanionEndpointKind = "hosted" | "tailnet" | "lan" | "bonjour";
 
@@ -194,5 +192,5 @@ export function phonePairingLink({
   const descriptor = encodePairingE2E(e2e);
   if (descriptor) fields.push(["e2e", descriptor]);
 
-  return `openmausbot://pair?${fields.map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join("&")}`;
+  return `${PRODUCT_URL_SCHEME}://pair?${fields.map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join("&")}`;
 }

@@ -1,6 +1,8 @@
-/** The Use my Mac link older bot messages hold; it shows as plain text. */
-export const USE_MY_COMPUTER_URL = "openmausbot://use-my-computer";
+import { PRODUCT_URL_SCHEME } from "./product-brand.ts";
+
+export const USE_MY_COMPUTER_URL = `${PRODUCT_URL_SCHEME}://use-my-computer`;
 
 export function isUseMyComputerUrl(value: string): boolean {
-  return value.trim().toLowerCase() === USE_MY_COMPUTER_URL;
+  const url = value.trim().toLowerCase();
+  return url === USE_MY_COMPUTER_URL || url === "openmausbot://use-my-computer";
 }

@@ -1,22 +1,11 @@
-appId: com.openmausbot.app
-productName: OpenMausBot
-artifactName: OpenMausBot-${version}-${arch}.${ext}
+appId: com.onewhitepaper.momobot
+artifactName: MoMo-bot-${version}-${arch}.${ext}
 
 protocols:
-  - name: OpenMausBot package install
-    schemes: [openmausbot]
+  - name: MoMo bot package install
+    schemes: [momobot]
 
-# In-app auto-update reads latest-mac.yml + the .zip (macOS) or latest.yml +
-# the NSIS .exe (Windows) from the PUBLIC releases in this source repo.
-# Public → no token on users' machines. Baked into
-# app-update.yml; both metadata files are emitted here even with
-# --publish never, and must be uploaded to the GitHub release alongside the
-# artifacts — a release missing latest.yml leaves every Windows install
-# stranded on its installed version.
-publish:
-  - provider: github
-    owner: milind-soni
-    repo: OpenMausBot
+publish: null
 
 directories:
   buildResources: build
@@ -37,7 +26,7 @@ files:
   - "!electron/resources/speech-helper"
   - "!electron/resources/speech-helper.swift"
   - "!electron/resources/speech-helper-Info.plist"
-  - "!electron/resources/OpenMausBot Speech.app/**"
+  - "!electron/resources/* Speech.app/**"
   # The Teach a skill recorder is gone, but a machine that once ran
   # `pnpm build:recorder` may still hold its helper build; never ship it.
   - "!electron/resources/recorder-helper"
@@ -54,11 +43,11 @@ asar: true
 extraResources:
   # Ship the app's own license terms in every desktop distribution.
   - from: LICENSE
-    to: licenses/OpenMausBot-LICENSE.txt
+    to: licenses/MoMo-bot-LICENSE.txt
   - from: NOTICE
-    to: licenses/OpenMausBot-NOTICE.txt
+    to: licenses/MoMo-bot-NOTICE.txt
   # cloudflared is distributed under Apache-2.0 as a separate executable.
-  # OpenMausBot itself uses the same full license text; ship another named
+  # MoMo bot uses the same full license text; ship another named
   # copy so the third-party executable's terms remain unambiguous.
   - from: LICENSE
     to: licenses/cloudflared-LICENSE.txt
@@ -85,6 +74,10 @@ extraResources:
     to: ui
   - from: dist-server
     to: server
+    filter:
+      - "**/*"
+      - "!enterprise"
+      - "!enterprise/**"
   # the companion sidecar — a separate process because it is the only part
   # of the app that listens off this machine, and it stays off until asked
   - from: dist-companion
@@ -95,10 +88,6 @@ extraResources:
     to: android-platform-tools
 
 mac:
-  # Two single-arch artifacts rather than one universal binary: the app is
-  # architecture-specific, and universal would make users download both halves.
-  # electron-updater picks by filename (arm64-marked files on Apple silicon,
-  # unmarked ones on Intel), so latest-mac.yml must list all four files.
   target:
     - target: dmg
       arch: [arm64, x64]
@@ -112,8 +101,8 @@ mac:
   entitlementsInherit: build/entitlements.mac.plist
   # the dictation helper is a signed background app — Windows and Linux never see it
   extraResources:
-    - from: electron/resources/OpenMausBot Speech.app
-      to: OpenMausBot Speech.app
+    - from: electron/resources/MoMo bot Speech.app
+      to: MoMo bot Speech.app
     # CUA must live outside ASAR. prepare-cua stages the signed executable and
     # a self-contained JS/native SDK bundle selected for macOS arm64.
     # ${arch} resolves per built arch — each bundle carries its own natives
@@ -133,14 +122,14 @@ mac:
     - from: dist-native/duckdb/darwin-${arch}/node_modules
       to: duckdb/node_modules
   extendInfo:
-    NSMicrophoneUsageDescription: OpenMausBot uses the microphone for voice dictation into the composer.
-    NSSpeechRecognitionUsageDescription: OpenMausBot transcribes your voice on-device to type messages for you.
-    NSAccessibilityUsageDescription: OpenMausBot uses Accessibility when you let a bot control this Mac.
-    NSLocalNetworkUsageDescription: OpenMausBot connects to your phones and your other computers on this network and on Tailscale.
+    NSMicrophoneUsageDescription: MoMo bot uses the microphone for voice dictation into the composer.
+    NSSpeechRecognitionUsageDescription: MoMo bot transcribes your voice on-device to type messages for you.
+    NSAccessibilityUsageDescription: MoMo bot uses Accessibility when you let a bot control this Mac.
+    NSLocalNetworkUsageDescription: MoMo bot connects to your phones and your other computers on this network and on Tailscale.
     NSBonjourServices:
       - _openmausbot._tcp
-    NSScreenCaptureUsageDescription: OpenMausBot uses Screen Recording so bots can see this Mac before acting.
-    NSDownloadsFolderUsageDescription: OpenMausBot looks in Downloads for the file your Grok Bot saved when you move it here.
+    NSScreenCaptureUsageDescription: MoMo bot uses Screen Recording so bots can see this Mac before acting.
+    NSDownloadsFolderUsageDescription: MoMo bot looks in Downloads for the file your Grok Bot saved when you move it here.
   # Notarization runs manually after the build (notarytool + staple),
   # mirroring the BlueyLite ship_release.sh flow.
   notarize: false
@@ -150,7 +139,7 @@ dmg:
   # ${arch} is load-bearing: without it the x64 dmg silently overwrites
   # the arm64 one when both arches build (this section overrides both the
   # top-level and mac-level artifactName, so it must carry the arch itself)
-  artifactName: OpenMausBot-${version}-${arch}.dmg
+  artifactName: MoMo-bot-${version}-${arch}.dmg
   # x/y are icon centres in points. electron-builder 26.15.3 sizes the window
   # from build/background.png and ignores dmg.window whenever a background is set.
   iconSize: 112
@@ -184,24 +173,12 @@ win:
       to: cua-driver-background.exe
     - from: dist-native/cua-win32-x64/cua-sdk
       to: cua-sdk
-  # No signing config yet (would go under win.signtoolOptions or
-  # win.azureSignOptions — eb 26 nests it, there is no top-level
-  # win.certificateFile). The installer is unsigned, so SmartScreen shows
-  # "unknown publisher" on first run (README says so). verifyUpdateCodeSignature
-  # defaults true, but electron-updater skips the check when app-update.yml
-  # carries no publisherName — so auto-update still works today. Do NOT set
-  # publisherName without actually signing, or every update is rejected as
-  # untrusted; and once signed, keep the cert subject stable (or list both old
-  # and new in publisherName) or you strand already-installed users.
 
 nsis:
   oneClick: true
   perMachine: false
-  shortcutName: OpenMausBot
-  # Versioned, like the .dmg. The README's /latest/download/ button needs a
-  # STABLE filename, so ship a second copy named OpenMausBot-setup.exe on the
-  # release — the same trick as OpenMausBot.dmg beside OpenMausBot-${version}.dmg.
-  artifactName: OpenMausBot-${version}-setup.${ext}
+  shortcutName: MoMo bot
+  artifactName: MoMo-bot-${version}-setup.${ext}
 
 linux:
   target:
@@ -211,15 +188,12 @@ linux:
       arch: x64
     - target: rpm
       arch: x64
-  # Keep the vector source in the freedesktop scalable icon hierarchy. A
-  # lone 1024px PNG is not indexed by GNOME's hicolor theme on Ubuntu 24.04.
-  icon: build/icon.svg
+  icon: build/icons
   category: Utility
-  executableName: openmausbot
+  executableName: momobot
   synopsis: Your own team of AI bots, in a chat app
   description: A local-first chat app for running a team of AI agents.
-  maintainer: Milind Soni <46266943+milind-soni@users.noreply.github.com>
-  vendor: OpenMausBot
+  vendor: MoMo bot
   syncDesktopName: true
   # The reviewed x64 CLI runtime is staged before packaging and remains
   # outside ASAR so executable modes and adjacent sidecars are preserved.
@@ -232,11 +206,11 @@ linux:
       to: browser-engine
     - from: dist-native/duckdb/linux-x64/node_modules
       to: duckdb/node_modules
-    - from: build/linux-openmausbot-browser.apparmor
-      to: openmausbot-browser.apparmor
+    - from: build/linux-momobot-browser.apparmor
+      to: momobot-browser.apparmor
   desktop:
     entry:
-      Name: OpenMausBot
+      Name: MoMo bot
       Comment: Your own team of AI bots, in a chat app
       Keywords: AI;Agents;Chat;Productivity;
 
@@ -258,7 +232,7 @@ rpm:
   # Own the install folder as well, so removing the package leaves no empty directories.
   # No /usr/lib/.build-id links: another RPM bundling the same Electron binary
   # would own the same link paths and the install would fail with a file conflict.
-  fpm: ["--directories", "/opt/OpenMausBot", "--rpm-rpmbuild-define", "_build_id_links none"]
+  fpm: ["--directories", "/opt/MoMo bot", "--rpm-rpmbuild-define", "_build_id_links none"]
   afterInstall: build/linux-after-install.sh
   afterRemove: build/linux-after-remove.sh
 

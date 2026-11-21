@@ -74,6 +74,7 @@ const tick = async (ms: number) => {
 };
 
 beforeEach(() => {
+  vi.stubEnv("VITE_MOMO_CLOUD_URL", "https://cloud.example.test");
   setLocale("en");
   f.dispatch.mockReset();
   f.detect.mockReset();
@@ -99,6 +100,7 @@ afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
   vi.useRealTimers();
+  vi.unstubAllEnvs();
 });
 
 describe("what MausBot says first", () => {
@@ -206,6 +208,15 @@ describe("in the chat (Simple mode)", () => {
     expect(lines()).toHaveLength(4);
     expect(chips()).toEqual([]);
     expect(f.detect).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("hides the Cloud step without a configured service (advanced: %s)", async (advanced) => {
+    vi.stubEnv("VITE_MOMO_CLOUD_URL", undefined);
+    vi.stubEnv("VITE_MOMO_CLOUD_STAGING_URL", undefined);
+    f.advanced = advanced;
+    await show();
+    expect(chips()).toContain("phone");
+    expect(chips()).not.toContain("cloud");
   });
 
   it("counts Try Cloud as the first run's Cloud moment, then opens Add a Cloud", async () => {

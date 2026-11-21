@@ -5,7 +5,10 @@ on:
     paths:
       - "apps/docs/**"
       - "docs/screenshots/**"
-      - "public/app-icon.svg"
+      - "public/app-icon-192.png"
+      - "public/apple-touch-icon.png"
+      - "shared/product-brand.ts"
+      - "packages/phone-protocol/src/product-brand.ts"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -15,7 +18,10 @@ on:
     paths:
       - "apps/docs/**"
       - "docs/screenshots/**"
-      - "public/app-icon.svg"
+      - "public/app-icon-192.png"
+      - "public/apple-touch-icon.png"
+      - "shared/product-brand.ts"
+      - "packages/phone-protocol/src/product-brand.ts"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"

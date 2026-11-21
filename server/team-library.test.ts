@@ -3,14 +3,18 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  TEAM_LIBRARY_CATALOG_URL,
-  TEAM_LIBRARY_RAW_ROOT,
+  fetchTeamCatalog,
   fetchGithubTeam,
   fetchLibraryTeam,
   githubManifestUrls,
   libraryTeamRoles,
   parseTeamCatalog,
 } from "./team-library.ts";
+
+const TEAM_LIBRARY_REPOSITORY = "https://github.com/example/templates";
+const TEAM_LIBRARY_RAW_ROOT = "https://raw.githubusercontent.com/example/templates/main";
+const TEAM_LIBRARY_CATALOG_URL = `${TEAM_LIBRARY_RAW_ROOT}/catalog.json`;
+const env = { OMB_TEAM_LIBRARY_REPOSITORY: TEAM_LIBRARY_REPOSITORY };
 
 const manifest = {
   format: "openmaus.team",
@@ -55,14 +59,24 @@ function response(value: unknown, status = 200): Response {
 }
 
 describe("team library", () => {
-  it("validates catalog paths and adds the trusted repository URL", () => {
-    const parsed = parseTeamCatalog(catalog);
-    expect(parsed.repositoryUrl).toBe("https://github.com/milind-soni/openmausbot-teams");
+  it("validates catalog paths and accepts a repository URL only from server configuration", async () => {
+    const parsed = await fetchTeamCatalog(vi.fn(async () => response({ ...catalog, repositoryUrl: "https://elsewhere.example" })), env);
+    expect(parsed.repositoryUrl).toBe(TEAM_LIBRARY_REPOSITORY);
     expect(parsed.teams[0]).toMatchObject({ slug: "engineering", members: 1 });
 
     const unsafe = structuredClone(catalog);
     unsafe.teams[0]!.manifest = "../private.json";
     expect(() => parseTeamCatalog(unsafe)).toThrow("safe catalog path");
+  });
+
+  it("never contacts a template repository unless a valid origin is configured", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    for (const configuration of [{}, { OMB_TEAM_LIBRARY_REPOSITORY: "https://example.test/templates" }]) {
+      expect(await fetchTeamCatalog(fetcher, configuration)).toMatchObject({ repositoryUrl: null, teams: [] });
+      await expect(fetchLibraryTeam("engineering", fetcher, configuration)).rejects.toMatchObject({ status: 404 });
+      expect(await libraryTeamRoles(fetcher, configuration)).toEqual([]);
+    }
+    expect(fetcher).not.toHaveBeenCalled();
   });
 
   it("loads only the manifest selected by the trusted catalog", async () => {
@@ -73,7 +87,7 @@ describe("team library", () => {
       return response({}, 404);
     }) as unknown as typeof fetch;
 
-    const loaded = await fetchLibraryTeam("engineering", fetcher);
+    const loaded = await fetchLibraryTeam("engineering", fetcher, env);
     if (loaded.format !== "openmaus.team") throw new Error("expected a legacy team");
     expect(loaded.team.name).toBe("Engineering");
     expect(fetcher).toHaveBeenCalledTimes(2);
@@ -149,7 +163,7 @@ describe("the team library as a Chief of Staff reads it", () => {
   }) as unknown as typeof fetch;
 
   it("lists every ready-made team with its summary and roles, marks the team's own lead, and keeps a team whose file is missing", async () => {
-    const teams = await libraryTeamRoles(fetcher);
+    const teams = await libraryTeamRoles(fetcher, env);
     expect(teams.slice(0, 4)).toEqual([
       { name: "Engineering Team", summary: "Plan and ship software.", roles: [{ name: "Ada", title: "Tech Lead", does: "Coordinates the work" }] },
       { name: "Signal Desk", summary: "Find and explain the signal.", roles: [
@@ -170,6 +184,6 @@ describe("the team library as a Chief of Staff reads it", () => {
   });
 
   it("fails when the catalog itself can't be read", async () => {
-    await expect(libraryTeamRoles(vi.fn(async () => response({}, 503)) as unknown as typeof fetch)).rejects.toThrow("HTTP 503");
+    await expect(libraryTeamRoles(vi.fn(async () => response({}, 503)) as unknown as typeof fetch, env)).rejects.toThrow("HTTP 503");
   });
 });

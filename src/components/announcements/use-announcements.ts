@@ -8,7 +8,6 @@ import { appVersion } from "@/lib/app-links";
 import { brandStatus } from "@/lib/brand";
 import { cloudPlanView } from "@/lib/cloud-plan";
 import { activeLocale } from "@/lib/i18n";
-import { modelgoOfferable } from "@/lib/modelgo-offer";
 import { usedBefore } from "@/lib/notices";
 import type { WelcomeViewer } from "@/lib/onboarding";
 import { useStore } from "@/state/store";
@@ -74,9 +73,7 @@ export function useAnnouncements(now: () => number = Date.now): Announcements {
   const cloudHome = Boolean(state.config?.cloudHome || viewer?.cloudHome);
   const sponsors = SPONSOR_CARDS_FOR_TEAM_MEMBERS || !team || viewer?.canSave === true;
   const facts: HistoryFacts = {
-    branded, organization, remote, team, canSave, sponsors,
-    cloudSale: Boolean(bridge && desktop), cloudCards: Boolean(bridge || (!remote && cloudHome && window.ogb?.cloudPlan)),
-    modelgo: modelgoOfferable(state.config?.managedPolicy),
+    branded, organization, cloudSale: Boolean(bridge && desktop),
   };
   const surface = announcementSurface(local, cloudHome);
   const cards = cardsForPerson(useAnnouncementCards(!branded), {

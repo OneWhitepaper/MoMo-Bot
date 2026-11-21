@@ -1,6 +1,6 @@
 import { ArrowUpRight } from "lucide-react";
 import { t } from "@/lib/i18n";
-import { CLOUD_PLAN_URL } from "@/lib/app-links";
+import { configuredCloudPage } from "@/lib/app-links";
 import { productName } from "@/lib/brand";
 import { api } from "@/state/store";
 import { useStoreDispatch, useStoreSelector } from "@/state/store-select";
@@ -94,11 +94,13 @@ export function PlanPage() {
   const linkRequest = useStoreSelector((state) => state.appSettingsCloudLink), teamHome = useStoreSelector((state) => state.config?.team), dispatch = useStoreDispatch();
   const { usage, upgrade, dialog } = useCloudUsageSettings();
   if (!ctx.desktop) {
+    const planUrl = teamHome?.cloudPage ?? configuredCloudPage();
+    if (!planUrl) return null;
     return (
       <SettingsGroup block="plan">
         <SettingsRows>
           <SettingRow title={t("settings.plan.browserTitle")} subtitle={t("settings.plan.browserLine", { app: productName() })}>
-            <a className="ui-button ui-button-primary inline-flex items-center gap-1" href={CLOUD_PLAN_URL} target="_blank" rel="noreferrer">{t("settings.plan.openBilling")}<ArrowUpRight size={12} aria-hidden="true" /></a>
+            <a className="ui-button ui-button-primary inline-flex items-center gap-1" href={planUrl} target="_blank" rel="noreferrer">{t("settings.plan.openBilling")}<ArrowUpRight size={12} aria-hidden="true" /></a>
           </SettingRow>
         </SettingsRows>
       </SettingsGroup>

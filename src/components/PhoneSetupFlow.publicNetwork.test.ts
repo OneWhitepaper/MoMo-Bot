@@ -28,7 +28,7 @@ const controller = (over: Partial<PhoneSetupController>): PhoneSetupController =
   accountBusy: false,
   error: null,
   accountError: null,
-  pairingLink: "openmausbot://pair?address=192.168.1.34%3A8810",
+  pairingLink: "momobot://pair?address=192.168.1.34%3A8810",
   address: "192.168.1.34",
   pairingPort: 8810,
   addressText: "192.168.1.34:8810",
@@ -88,12 +88,12 @@ describe("the pairing code", () => {
     for (const over of [{}, { state: e2e }]) {
       const html = render(over);
       expect(qrCodes(html)).toBe(1);
-      expect(html).toContain("Install MausBot on your phone from the App Store or Google Play, then scan this code in the app.");
-      expect(html).toContain("Scan it from inside the MausBot app, not the camera.");
+      expect(html).toContain("Scan this code with a compatible companion app on your phone.");
+      expect(html).toContain("Use the scanner in the companion app, not your phone’s camera.");
     }
   });
 
-  it("names the stores without linking to them", () => {
+  it("does not offer unlisted app store downloads", () => {
     for (const over of [{}, { state: e2e }]) {
       const html = render(over);
       expect(html).not.toMatch(/apps\.apple\.com|play\.google\.com|\.apk|<a /);

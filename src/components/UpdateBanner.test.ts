@@ -8,7 +8,6 @@ import type { UpdaterState } from "@/lib/updater";
 const fixture = vi.hoisted(() => ({ state: { status: "idle" } as UpdaterState }));
 // As the real hook: no state without the desktop app's updater bridge.
 vi.mock("@/lib/updater", async (original) => ({ ...(await original<typeof import("@/lib/updater")>()), useUpdaterState: () => (window.ogb?.updater ? fixture.state : null) }));
-vi.mock("../lib/brand", () => ({ brand: () => ({ name: "OpenMausBot" }), productName: () => "MausBot" }));
 import { UpdateBanner } from "./UpdateBanner";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -32,7 +31,7 @@ function serverPageBridge(origin: string, answered: boolean) {
       contextBridge: { exposeInMainWorld: (_name: string, value: unknown) => { bridge = value; } },
       ipcRenderer: {
         on() {}, removeListener() {}, send() {}, invoke: () => Promise.resolve({ status: "idle" }),
-        sendSync: (channel: string) => channel === "update:offered" && answered,
+        sendSync: (channel: string) => channel === "home:page" && answered,
       },
     }),
   });
@@ -40,11 +39,8 @@ function serverPageBridge(origin: string, answered: boolean) {
 }
 
 describe("UpdateBanner", () => {
-  it("shows the ready update and its restart on My Cloud's page", () => {
-    const html = render({ status: "downloaded", version: "0.2.0" }, { location: { origin: CLOUD }, ogb: serverPageBridge(CLOUD, true) });
-    expect(html).toContain("MausBot 0.2.0 is ready");
-    expect(html).toContain("Restart to update");
-    expect(html).toContain("Later");
+  it("does not show desktop updates on a hosted workspace", () => {
+    expect(render({ status: "downloaded", version: "0.2.0" }, { location: { origin: CLOUD }, ogb: serverPageBridge(CLOUD, true) })).toBe("");
   });
 
   it("is absent from another server's page, which never gets the updater", () => {
@@ -63,7 +59,7 @@ describe("UpdateBanner", () => {
 
   it("says a ready update installs by itself the next time the person is away, beside its Restart", () => {
     const html = render({ status: "downloaded", version: "0.2.0", installsByItself: true });
-    expect(html).toContain("MausBot installs it by itself the next time you");
+    expect(html).toContain("MoMo bot installs it by itself the next time you");
     expect(html).toContain("Restart to update");
     expect(render({ status: "downloaded", version: "0.2.0", installMode: "handoff", installsByItself: true })).not.toContain("by itself");
   });
@@ -90,7 +86,7 @@ describe("UpdateBanner", () => {
 
   it.each(["ETIMEDOUT while staging", "native error ".repeat(30)])("preserves restart recovery for a nonretryable error: %s", (message) => {
     const html = render({ status: "error", retryable: false, message });
-    expect(html).toContain("Quit and reopen MausBot before trying the update again.");
+    expect(html).toContain("Quit and reopen MoMo bot before trying the update again.");
     expect(html).not.toContain("Try again");
     expect(html).toContain("Dismiss");
   });
@@ -127,7 +123,7 @@ describe("UpdateBanner", () => {
       message: "Not enough disk space to prepare the update. Free some space, then try again. Quit and reopen OpenMausBot before trying the update again.",
     });
     expect(html).toContain("Free some space");
-    expect(html).toContain("Quit and reopen MausBot");
+    expect(html).toContain("Quit and reopen MoMo bot");
     expect(html).not.toContain("Try again</button>");
   });
 

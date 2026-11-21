@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUpRight, Check, ChevronDown, Copy, FolderDown, Github, Library, Loader2, MoreHorizontal, RefreshCw, Trash2, Upload } from "lucide-react";
 
-import { COMMUNITY_UPLOAD_URL, TEMPLATE_UPDATE_MESSAGE, type TemplateAvatar, type TemplateCard, type TemplateDetails, type TemplateRepoPublish } from "../../shared/share-card";
+import { TEMPLATE_UPDATE_MESSAGE, type TemplateAvatar, type TemplateCard, type TemplateDetails, type TemplateRepoPublish } from "../../shared/share-card";
 import { botBodyId } from "../../shared/bot-body";
 import { MAUS_COLOR_NAMES, type MausColor } from "../../shared/wire";
 import { openExternalLink } from "@/lib/app-links";
@@ -145,6 +145,7 @@ export function TemplateButtons({ actions, primary, view, extra }: {
   extra?: ReactNode;
 }) {
   const { card, busy } = actions;
+  const uploadUrl = card.uploadUrl;
   if (card.status === "gone") return null;
   const saveButton = (
     <button type="button" data-template-save onClick={() => void actions.save()} disabled={busy !== null} className={cn(card.fallback ? ASK_PRIMARY_BUTTON : cn(ASK_CHIP, ASK_CHIP_IDLE))}>
@@ -155,9 +156,9 @@ export function TemplateButtons({ actions, primary, view, extra }: {
     <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
       {card.fallback ? <>
         {saveButton}
-        <button type="button" data-template-upload onClick={() => openLink(COMMUNITY_UPLOAD_URL)} className={cn(ASK_CHIP, ASK_CHIP_IDLE)}>
+        {uploadUrl && <button type="button" data-template-upload onClick={() => openLink(uploadUrl)} className={cn(ASK_CHIP, ASK_CHIP_IDLE)}>
           <Github size={14} aria-hidden="true" />{t("template.uploadOnGithub")}
-        </button>
+        </button>}
       </> : card.status === "published" && card.link ? <>
         <CopyLinkButton link={card.link} />
         {view.url && <button type="button" onClick={() => openLink(view.url!)} className={cn(ASK_CHIP, ASK_CHIP_IDLE)}>

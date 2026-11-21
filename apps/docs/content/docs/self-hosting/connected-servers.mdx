@@ -1,11 +1,11 @@
 ---
-title: What a connected server shares
-description: For a security reviewer. Exactly what MausBot can do on a server you connect to it, and what that server sends to MausBot.
+title: Connected servers (upstream reference)
+description: Reference for the optional connector inherited from upstream OpenMausBot.
 icon: ShieldCheck
 ---
 
-<Callout title="Connected mode is not on sale yet">
-  A standalone server, the default, has no connector and nothing on this page applies to it. This page describes the connector's code as it is in the [public repository](https://github.com/milind-soni/OpenMausBot/tree/main/connector), so you can check every line against it. No released connector or server contains this mode yet. Items marked **planned** do not exist yet.
+<Callout title="Reference for the optional upstream connector">
+  MoMo bot does not enroll in a control plane automatically. This page documents the original OpenMausBot connector and its installer, paths, and images. Using a connector with MoMo bot requires a separately configured compatible control plane and an installation adapted to your deployment.
 </Callout>
 
 A connected server is a MausBot server you installed and run yourself, which MausBot's control plane (the Admin) may start, stop, update and back up for you, and whose health it watches. The part that does this on your server is the **connector**. On a server you run it works in **customer-run mode**, and that mode is what this page describes.
@@ -23,7 +23,7 @@ The whole list of what the Admin may run, ask and learn in this mode is one file
 
 ## It connects the server you installed
 
-The connector attaches to the MausBot the [server installer](/docs/self-hosting/deploy-vps) made in `/opt/openmausbot`: the same containers, the same `data` folder, the same settings. Nothing is reinstalled and no data moves. Two limits:
+The connector attaches to the MausBot the [upstream server installer](https://github.com/milind-soni/OpenMausBot/blob/main/deploy/install.sh) made in `/opt/openmausbot`: the same containers, the same `data` folder, the same settings. Nothing is reinstalled and no data moves. Two limits:
 
 - It attaches only to that layout: Docker Compose, the published image, the data in a folder beside the Compose file. A server built from source, or run without Docker, cannot be connected yet.
 - A connector started the other way (the mode MausBot uses on servers it operates itself) refuses to enrol on a machine where your MausBot already runs, so there are never two.
@@ -44,7 +44,7 @@ Three things to know:
 
 - **Not on the list, so refused:** `export-disk` (uploads an archive of the data to MausBot) and `import-disk` (replaces the data with an archive from elsewhere). They exist in the connector for servers MausBot operates itself.
 - **`update` only moves forward.** An image whose version is older than the one your server runs, or that names no version, is refused: once by the connector, and again by the updater's runner on your server, outside any container. MausBot cannot roll your server back to an earlier release. A second floor, the first release with the hardened profile, is **planned**: no release has that profile yet.
-- **`update` needs your updater.** It works only when `update.sh` is in `/opt/openmausbot` and the connector's installer has set up the small systemd unit that runs it. Without either, the job is refused and nothing changes. The [server installer](/docs/self-hosting/deploy-vps) puts `update.sh` there.
+- **`update` needs your updater.** It works only when `update.sh` is in `/opt/openmausbot` and the connector's installer has set up the small systemd unit that runs it. Without either, the job is refused and nothing changes. The [upstream server installer](https://github.com/milind-soni/OpenMausBot/blob/main/deploy/install.sh) puts `update.sh` there.
 
 ## What only you can do: two more jobs
 

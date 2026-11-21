@@ -1,6 +1,4 @@
-// Email sign-in through the OpenMausBot control plane, or through the server's own mail server when OMB_SIGNIN_SMTP_URL is
-// set: the code exchange is server-side, so a browser only talks to this server, and a server with an empty allow-list
-// does not expose the routes. The result is an ordinary local session.
+// The code exchange stays server-side and returns an ordinary local session.
 import { resolveCompanionControlPlaneURL } from "../electron/companion-account-service.mjs";
 import { ControlPlaneError, createControlPlaneClient, normalizeAccountEmail, type ControlPlaneClient } from "../electron/control-plane-client.mjs";
 import type { Scope } from "./sessions.ts";
@@ -59,16 +57,16 @@ export function createEmailSignIn(options: {
     return mailedSignIn(allow, createSignInMail({ url: smtpUrl, from: env.OMB_SIGNIN_SMTP_FROM,
       ...(options.mailTransport ? { transport: options.mailTransport } : {}) }));
   }
-  let client: ControlPlaneClient | null = options.client ?? null;
+  const origin = resolveCompanionControlPlaneURL({ environment: env });
+  let client: ControlPlaneClient | undefined = options.client;
   const controlPlane = (): ControlPlaneClient => {
     if (client) return client;
-    const url = resolveCompanionControlPlaneURL({ isPackaged: true, environment: env });
-    if (!url) throw new Error("OMB_CONTROL_PLANE_URL is set but is not an https address");
-    client = createControlPlaneClient({ baseURL: url, fetchImpl: options.fetchImpl });
+    if (!origin) throw new Error("Set OMB_CONTROL_PLANE_URL to an HTTPS origin or configure OMB_SIGNIN_SMTP_URL");
+    client = createControlPlaneClient({ baseURL: origin, fetchImpl: options.fetchImpl });
     return client;
   };
   return {
-    enabled: () => signInEnabled(allow()),
+    enabled: () => Boolean(client || origin) && signInEnabled(allow()),
     async start(rawEmail) {
       const email = normalizeAccountEmail(rawEmail);
       if (!email) return { ok: false, status: 400, ...userError("serverError.email.invalid") };

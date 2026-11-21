@@ -2,11 +2,12 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { PRODUCT_LOGO } from "@/lib/brand";
 import { t } from "@/lib/i18n";
 import { StoreProvider, type Bot } from "@/state/store";
 import { draftOf, MausBotWelcomeCard, mausBotWelcomeDue, welcomeName, welcomePatch } from "./MausBotWelcome";
 
-const maus = { id: "maus", threadId: "t1", name: "MausBot", title: "", description: "", notifications: true, color: "chrome", mascotBody: null,
+const maus = { id: "maus", threadId: "t1", name: "MoMo bot", title: "", description: "", notifications: true, color: "chrome", mascotBody: null,
   avatarUrl: null, unread: false, modelSelection: { instanceId: "claude", model: "sonnet" }, createdAt: 1, defaultBot: {} } as unknown as Bot;
 
 describe("MausBot's first-launch welcome", () => {
@@ -27,7 +28,7 @@ describe("MausBot's first-launch welcome", () => {
       .toEqual({ name: "Jarvis", color: "blue", mascotBody: "blob", welcomed: true, sidebarHidden: false, pinned: true });
   });
 
-  it("Add with the panel never opened keeps the chrome-steel defaults", () => {
+  it("Add with the panel never opened keeps the default profile", () => {
     expect(welcomePatch(maus, draftOf(maus), true)).toEqual({ welcomed: true, sidebarHidden: false, pinned: true });
   });
 
@@ -38,7 +39,7 @@ describe("MausBot's first-launch welcome", () => {
 
   it("saves an empty name as MausBot and caps a long one at the bot-name limit", () => {
     const jarvis = { ...maus, name: "Jarvis" };
-    expect(welcomePatch(jarvis, { ...draftOf(jarvis), name: "   " }, true).name).toBe("MausBot");
+    expect(welcomePatch(jarvis, { ...draftOf(jarvis), name: "   " }, true).name).toBe("MoMo bot");
     expect(welcomeName("x".repeat(300))).toHaveLength(100);
     expect(welcomeName("  Ada ")).toBe("Ada");
   });
@@ -53,13 +54,21 @@ describe("MausBot's first-launch welcome", () => {
       .toEqual({ avatarUrl: null, avatarCrop: "mascot", welcomed: true, sidebarHidden: false, pinned: true });
   });
 
-  it("opens on MausBot's picture alone: the customise panel stays closed until the picture is clicked", () => {
+  it("keeps a selected shape or picture instead of the product avatar", () => {
+    const render = (bot: Bot) => renderToStaticMarkup(createElement(StoreProvider, null, createElement(MausBotWelcomeCard, { bot, onClose: () => {} })));
+    expect(render({ ...maus, mascotBody: "cursor" })).not.toContain(PRODUCT_LOGO);
+    expect(render({ ...maus, color: "blue" })).not.toContain(PRODUCT_LOGO);
+    expect(render({ ...maus, avatarUrl: "/api/attachments/custom.png", avatarCrop: "circle" })).toContain("/api/attachments/custom.png");
+  });
+
+  it("opens on the default assistant's picture alone: the customise panel stays closed until the picture is clicked", () => {
     const html = renderToStaticMarkup(createElement(StoreProvider, null, createElement(MausBotWelcomeCard, { bot: maus, onClose: () => {} })));
-    expect(html).toContain(`aria-label="${t("mausbotWelcome.customize", { name: "MausBot" })}"`);
+    expect(html).toContain(`aria-label="${t("mausbotWelcome.customize", { name: "MoMo bot" })}"`);
+    expect(html).toContain(`src="${PRODUCT_LOGO}" alt="MoMo bot"`);
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('data-mausbot-welcome-panel="closed"');
     expect(html).toMatch(/data-mausbot-welcome-panel="closed"[^>]*|inert=""[^>]*data-mausbot-welcome-panel="closed"/);
-    expect(html).toContain(t("mausbotWelcome.title", { name: "MausBot" }));
-    expect(html).toContain(t("mausbotWelcome.add", { name: "MausBot" }));
+    expect(html).toContain(t("mausbotWelcome.title", { name: "MoMo bot" }));
+    expect(html).toContain(t("mausbotWelcome.add", { name: "MoMo bot" }));
   });
 });

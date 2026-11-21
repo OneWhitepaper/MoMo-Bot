@@ -93,10 +93,9 @@ test("main hands the talk wiring its speech sinks, this computer's own server an
   assert.doesNotMatch(main, /ipcMain\.handle\("(?:speech|talk-shortcut|call):/);
 });
 
-test("main tells the talk wiring when home changes and which skin the app painted, and counts a talk ask as busy for a quiet update", () => {
+test("main tells the talk wiring when home changes and which skin the app painted", () => {
   assert.match(main, /const homeWindow = createHomeWindow\(\{[^]*?rehomed: \(\) => talk\.homeChanged\(\),[^]*?\}\);\ninstallHomeWindowIpc/);
   assert.match(main, /ipcMain\.handle\("desktop:skin", \(event, skin\) => \{\s*if \(!isKnownSkin\(skin\)\) return false;\s*if \(chromeRail\.owns\(event\)\) return true;\s*try \{\s*talk\.skin\(skin\);/);
-  assert.match(main, /busy: \(\) => \(\(oneHome\.oneHome\.busy\(\) \|\| ownHome\?\.busy\(\)\) && "move"\) \|\| \(computerSharing\?\.busy\(\) && "lending"\) \|\| \(talk\.busy\(\) && "talk"\) \|\|/);
 });
 
 test("the talk bridge keys stay off other servers' pages; a call can be reported from My Cloud's page", () => {
@@ -227,7 +226,7 @@ test("a press, an open or a dismiss that throws is logged, never thrown at Elect
   h.talk.close();
 });
 
-test("clicking the box opens its chat by a link with both ids escaped, or else just shows MausBot", async () => {
+test("clicking the box opens its chat by a link with both ids escaped, or else just shows MoMo bot", async () => {
   const h = harness({ serve: route => {
     if (route === "/api/bots?messages=0") return json({ bots: [{ id: "b?1&x", defaultBot: {}, tasks: [] }] });
     if (route === "/api/bots/b%3F1%26x/tasks") return json({ task: { threadId: "t 1/x" } });
@@ -244,7 +243,7 @@ test("clicking the box opens its chat by a link with both ids escaped, or else j
   sink.transcript({ text: "what's on today" });
   sink.end({ code: 0, reason: "completed" });
   h.click("open");
-  assert.deepEqual(h.links, ["openmausbot://thread/t%201%2Fx?bot=b%3F1%26x"]);
+  assert.deepEqual(h.links, ["momobot://thread/t%201%2Fx?bot=b%3F1%26x"]);
   h.talk.close();
 });
 
@@ -276,7 +275,7 @@ test("a press while this computer's server is still starting says so", async () 
   h.start();
   h.press();
   await settle();
-  assert.deepEqual((await h.painted()).at(-1), { state: "error", text: "MausBot is still starting. Try again in a moment.", ...englishLabels });
+  assert.deepEqual((await h.painted()).at(-1), { state: "error", text: "MoMo bot is still starting. Try again in a moment.", ...englishLabels });
   h.talk.close();
 });
 

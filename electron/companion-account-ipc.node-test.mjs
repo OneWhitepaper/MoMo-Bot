@@ -152,6 +152,7 @@ test("starting the phone link checks a stored address first and waits on it only
     rememberCompanionRoute: async (route, on) => { if (on) routesOn.add(route); },
     phoneLinkRoutes: { touched: () => {} },
     companionRouteOn: (route) => routesOn.has(route),
+    resolveCompanionControlPlaneURL: () => "https://account.example.test",
     managedCompanionTunnelAccess: () => ({ endpoint: "https://c-fixture.example.test", token: "fixture" }),
     secureCredentials: {},
     companionAccountService: { checkStoredAddress: async () => null },

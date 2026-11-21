@@ -547,7 +547,7 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
   const place = useSettingsPlace();
   const summary = useAccountSummary();
   const desktopUpdate = useUpdateItem();
-  const serverUpdate = useServerUpdateItem(!window.ogb?.updater);
+  const serverUpdate = useServerUpdateItem(!window.ogb);
   const here = pageIsThisComputer();
   const openComputer = window.ogb?.rail?.openComputer;
   // A Cloud's page in the desktop window can't update the app: the row says where that happens, and goes there.

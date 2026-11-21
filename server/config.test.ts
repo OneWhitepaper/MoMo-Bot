@@ -2419,8 +2419,8 @@ describe("X research's included relay token", () => {
 });
 
 describe("DATA_DIR outside the suite's throwaway home", () => {
-  function childDataDir(env: NodeJS.ProcessEnv): string {
-    const script = "const m = await import(process.env.OMB_CONFIG_URL); process.stdout.write(m.DATA_DIR);";
+  function childDataDir(env: NodeJS.ProcessEnv, prepare = false): string {
+    const script = `const m = await import(process.env.OMB_CONFIG_URL); ${prepare ? "m.ensureDirs();" : ""} process.stdout.write(m.DATA_DIR);`;
     const { OMB_DATA_DIR: _dataDir, VITEST: _vitest, NODE_ENV: _nodeEnv, ...inherited } = process.env;
     return execFileSync(process.execPath, ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e", script], {
       env: { ...inherited, OMB_CONFIG_URL: pathToFileURL(join(import.meta.dirname, "config.ts")).href, ...env }, encoding: "utf8",
@@ -2431,7 +2431,7 @@ describe("DATA_DIR outside the suite's throwaway home", () => {
     const realHome = userInfo().homedir;
     const dataDir = childDataDir({ HOME: realHome, USERPROFILE: realHome, VITEST: "true" });
     try {
-      expect(dataDir).not.toBe(join(realHome, ".openmausbot"));
+      expect(dataDir).not.toBe(join(realHome, ".momobot"));
       expect(dataDir.startsWith(tmpdir())).toBe(true);
     } finally {
       // Only ever a throwaway folder: a broken guard would hand back the real home here.
@@ -2445,7 +2445,23 @@ describe("DATA_DIR outside the suite's throwaway home", () => {
   it("treats an empty OMB_DATA_DIR as unset", () => {
     const home = mkdtempSync(join(tmpdir(), "omb-config-home-"));
     try {
-      expect(childDataDir({ HOME: home, USERPROFILE: home, OMB_DATA_DIR: "" })).toBe(join(home, ".openmausbot"));
+      expect(childDataDir({ HOME: home, USERPROFILE: home, OMB_DATA_DIR: "" })).toBe(join(home, ".momobot"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("does not move old installations when creating its own data folder", () => {
+    const home = mkdtempSync(join(tmpdir(), "omb-config-home-"));
+    try {
+      for (const name of [".openmausbot", ".opengrokbot"]) {
+        mkdirSync(join(home, name));
+        writeFileSync(join(home, name, "old.txt"), name);
+      }
+      const separate = join(home, "my-workspace");
+      expect(childDataDir({ HOME: home, USERPROFILE: home, OMB_DATA_DIR: separate }, true)).toBe(separate);
+      expect(statSync(join(separate, "events")).isDirectory()).toBe(true);
+      for (const name of [".openmausbot", ".opengrokbot"]) expect(readFileSync(join(home, name, "old.txt"), "utf8")).toBe(name);
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
@@ -2454,7 +2470,7 @@ describe("DATA_DIR outside the suite's throwaway home", () => {
   it("keeps the home folder outside tests", () => {
     const home = mkdtempSync(join(tmpdir(), "omb-config-home-"));
     try {
-      expect(childDataDir({ HOME: home, USERPROFILE: home })).toBe(join(home, ".openmausbot"));
+      expect(childDataDir({ HOME: home, USERPROFILE: home })).toBe(join(home, ".momobot"));
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { bearer, emailOTP } from "better-auth/plugins";
 
+import { PRODUCT_NAME } from "../../../shared/product-brand";
 import type { ControlPlaneConfig } from "./config";
 import { sendOTPEmail } from "./email";
 
@@ -11,7 +12,7 @@ export function createAuth(
   requestId: string,
 ) {
   return betterAuth({
-    appName: "OpenMausBot",
+    appName: PRODUCT_NAME,
     baseURL: config.authBaseURL,
     basePath: "/api/auth",
     secret: env.BETTER_AUTH_SECRET,

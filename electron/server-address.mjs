@@ -1,11 +1,12 @@
+import { APP_SCHEME } from "./desktop-brand.mjs";
 // What a person types or pastes to reach a MausBot server: a pairing link, an address, an address and a code typed
-// apart, or a code on its own. One reader for the desktop's Connect sheet, `openmausbot connect` and the MCP bridge.
+// apart, or a code on its own. One reader for the desktop's Connect sheet, `momobot connect` and the MCP bridge.
 import { isTailnetHost, isTailnetName } from "./tailnet.mjs";
 
 export const PAIRING_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 export const PAIRING_CODE_LENGTH = 12;
 const PAIRING_CREDENTIAL = /^omb_pair_[A-Za-z0-9_-]{43}$/;
-/** The port `openmausbot serve` and the desktop app listen on. */
+/** The port `momobot serve` and the desktop app listen on. */
 export const DEFAULT_PORT = 8799;
 export const EXAMPLE_ADDRESS = `http://192.168.1.20:${DEFAULT_PORT}`;
 
@@ -123,8 +124,9 @@ function decoded(value) {
   }
 }
 
-/** `{ address, secret }` from an `openmausbot://pair` link; only one naming a server's own http(s) origin. */
+/** `{ address, secret }` from an `momobot://pair` link; only one naming a server's own http(s) origin. */
 function appLink(url) {
+  if (url.hostname !== "pair" || url.username || url.password || url.port || (url.pathname && url.pathname !== "/")) return null;
   const address = url.searchParams.get("address") ?? "";
   if (!/^https?:\/\//i.test(address)) return null;
   return { address, secret: url.searchParams.get("code") ?? url.searchParams.get("token") };
@@ -150,7 +152,8 @@ export function parseServerInput(addressInput, codeInput = "") {
   if (asCode.kind === "wrong" && asCode.problem !== "notACode") return { ok: false, problem: asCode.problem };
   if (/[\s\\]/.test(text)) return { ok: false, problem: "notAnAddress" };
   let secret = null;
-  if (/^openmausbot:/i.test(text)) {
+  const scheme = text.slice(0, text.indexOf(":")).toLowerCase();
+  if (scheme === APP_SCHEME || scheme === "openmausbot") {
     let link;
     try {
       link = appLink(new URL(text));

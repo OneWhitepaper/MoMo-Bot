@@ -1,10 +1,9 @@
-// The phc_ token is a write-only public key, safe to ship in the client.
 // posthog-js loads on demand: a static import would put ~240 kB into the startup bundle.
 import type { CaptureResult, PostHog } from "posthog-js";
 import { appVersion } from "@/lib/app-links";
 import { readAdvancedMode } from "@/lib/interface-mode";
 
-const TOKEN = "phc_m2hP39w8y2gLPvHgDvSXAu6xcZ3agjf4ruL56rGcMZEe";
+import { analyticsConfigured, analyticsToken } from "@/lib/analytics-config";
 
 // Read before init(): an opted-out install must never call posthog.init(), so no request leaves the machine.
 const OPT_OUT_KEY = "omb-analytics-opt-out";
@@ -19,6 +18,7 @@ let pending: Array<(ph: PostHog) => void> = [];
 let choice: boolean | undefined;
 
 export function analyticsEnabled(): boolean {
+  if (!analyticsConfigured()) return false;
   if (choice !== undefined) return choice;
   const desktop = desktopSwitch()?.enabled();
   if (typeof desktop === "boolean") return desktop;
@@ -36,6 +36,7 @@ export function optAction(enabled: boolean, running: boolean): OptAction {
 }
 
 export function setAnalyticsEnabled(enabled: boolean) {
+  if (!analyticsConfigured()) return;
   choice = enabled;
   void desktopSwitch()?.set?.(enabled).catch(() => {});
   try {
@@ -70,6 +71,7 @@ function keepStoredOptOut() {
 }
 
 export function initAnalytics(): Promise<void> {
+  if (!analyticsConfigured()) return Promise.resolve();
   keepStoredOptOut();
   if (client || !analyticsEnabled()) return Promise.resolve();
   loading ??= import("posthog-js")
@@ -88,7 +90,7 @@ function start(posthog: PostHog) {
     pending = [];
     return;
   }
-  posthog.init(TOKEN, {
+  posthog.init(analyticsToken(), {
     api_host: "https://us.i.posthog.com",
     autocapture: false, // never capture clicked-element text (conversation leak)
     capture_pageview: false,

@@ -9,7 +9,7 @@ import { createWorker } from "../src/index";
 import { forgetTunnelRelease, releaseTunnels } from "../src/tunnel-release";
 import { forgetRelayAdoption, importSigningSeed, mintRelayToken, orderNodes, RELAY_TOKEN_LIMIT, rolloutBucket } from "../src/relay";
 
-const BASE_URL = "https://auth.openmausbot.test";
+const BASE_URL = env.BETTER_AUTH_URL;
 const hex = (text: string) => Uint8Array.from(text.match(/../g)!.map((pair) => Number.parseInt(pair, 16)));
 const b64u = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const fromB64u = (text: string) => Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (text.length % 4)) % 4)), (c) => c.charCodeAt(0));
@@ -19,7 +19,13 @@ const worker = createWorker((async () => new Response('{"success":false,"errors"
 const seed = crypto.getRandomValues(new Uint8Array(32));
 
 function relayEnv(extra: Record<string, string> = {}): Env {
-  return { ...env, RELAY_TOKEN_SIGNING_KEY: b64u(seed), RELAY_ROLLOUT_PERCENT: "100", ...extra } as unknown as Env;
+  return {
+    ...env,
+    RELAY_TOKEN_SIGNING_KEY: b64u(seed),
+    RELAY_NODES: "relay1.openmausbot.com",
+    RELAY_ROLLOUT_PERCENT: "100",
+    ...extra,
+  } as unknown as Env;
 }
 
 async function call(testEnv: Env, path: string, options: { body?: unknown; token?: string; method?: string; via?: TestWorker } = {}) {
@@ -99,7 +105,6 @@ describe("relay host tokens", () => {
   it("mint a 12 h token for a stable host id, with the node order and the refresh time", async () => {
     const { credential, id } = await installation("mint@example.test");
     const before = Math.floor(Date.now() / 1000);
-    // Two nodes, whatever wrangler.jsonc lists today, so the order is still tested.
     const twoNodes = relayEnv({ RELAY_NODES: "relay1.openmausbot.com,relay2.openmausbot.com" });
     const first = await (await ask(twoNodes, credential)).json<Issued>();
     const second = await (await ask(twoNodes, credential)).json<Issued>();

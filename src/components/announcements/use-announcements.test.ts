@@ -3,7 +3,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { EMPTY_ONBOARDING } from "@/lib/onboarding";
-import { TEAMS_NOTICE } from "@/lib/notices";
+import type { AnnouncementCard } from "../../../shared/announcements";
 
 const f = vi.hoisted(() => ({ state: {} as Record<string, unknown>, dispatch: vi.fn(), session: {} as Record<string, unknown>, cards: [] as unknown[] }));
 vi.mock("@/state/store", () => ({
@@ -30,6 +30,11 @@ const mount = async () => {
   await act(async () => { root!.render(createElement(Probe)); });
   for (let i = 0; i < 3; i++) await act(async () => { await Promise.resolve(); });
 };
+const notice: AnnouncementCard = {
+  id: "project-release", kind: "product", title: "MoMo bot release", body: "A project announcement.",
+  primary: { label: "View release", action: { open_url: "https://release.example.test/" } },
+  starts: "2026-11-16T00:00:00Z", ends: "2026-11-30T00:00:00Z",
+};
 const config = (hintsSeen: string[], extra: Record<string, unknown> = {}) => ({ onboarding: { ...EMPTY_ONBOARDING, completedAt: "2026-09-01", version: 1, hintsSeen }, ...extra });
 
 let storage: Map<string, string>;
@@ -44,9 +49,10 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root?.unmount()); root = null; host?.remove(); vi.unstubAllGlobals(); });
 
-it("someone who used the app before has the dot for Teams alone, and opening Announcements clears it here and in their record", async () => {
+it("marks a configured project notice unread and records when Announcements opens", async () => {
+  f.cards = [notice];
   await mount();
-  expect(found.items[0]?.id).toBe(TEAMS_NOTICE);
+  expect(found.items.map(item => item.id)).toEqual([notice.id]);
   expect(found.unread).toBe(true);
   await act(async () => { found.markRead(); await Promise.resolve(); });
   expect(found.unread).toBe(false);
@@ -57,8 +63,15 @@ it("someone who used the app before has the dot for Teams alone, and opening Ann
   expect(found.unread, "the place's record keeps it for their other devices").toBe(false);
 });
 
-it("no dot once the Teams popup was seen, nor before the session is known", async () => {
-  f.state = { ...f.state, config: config([TEAMS_NOTICE]) };
+it("leaves a fresh install without default announcements", async () => {
+  await mount();
+  expect(found.items).toEqual([]);
+  expect(found.unread).toBe(false);
+});
+
+it("no dot once the project notice was seen, nor before the session is known", async () => {
+  f.cards = [notice];
+  f.state = { ...f.state, config: config([`announcement:${notice.id}`]) };
   await mount();
   expect(found.unread).toBe(false);
   await act(async () => root?.unmount());
@@ -68,11 +81,12 @@ it("no dot once the Teams popup was seen, nor before the session is known", asyn
   expect(found.unread, "waits for who is looking").toBe(false);
 });
 
-it("a Team Cloud's member: Teams is theirs, the dot too, and clearing it writes their own record", async () => {
+it("records a team member's read mark on their own account", async () => {
+  f.cards = [notice];
   f.session = { hosted: true, scopes: ["client"], team: { role: "member" } };
   f.state = { ...f.state, config: config([], { team: { id: "t", name: "Acme" }, cloudHome: true }) };
   await mount();
-  expect(found.items.map(item => item.id)).toEqual([TEAMS_NOTICE]);
+  expect(found.items.map(item => item.id)).toEqual([notice.id]);
   expect(found.unread).toBe(true);
   await act(async () => { found.markRead(); await Promise.resolve(); });
   expect(vi.mocked(api).mock.calls.some(([path]) => path === "/api/me/welcome")).toBe(true);

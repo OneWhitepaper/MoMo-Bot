@@ -1,27 +1,26 @@
 #!/bin/sh
-# MausBot on a server of your own: checks the server, then installs the MausBot server with HTTPS on your domain.
+# MoMo bot on a server of your own: checks the server, then installs the MoMo bot server with HTTPS on your domain.
 # Running it again repairs or updates the install and never touches your data.
 #
-#   curl -fsSL https://raw.githubusercontent.com/milind-soni/OpenMausBot/main/deploy/install.sh | sudo sh -s -- --domain maus.example.com
+#   curl -fsSL https://raw.githubusercontent.com/OneWhitepaper/MoMo-Bot/main/deploy/install.sh | sudo sh -s -- --domain maus.example.com
 #   ... | sudo sh -s -- --check --domain maus.example.com    only checks the server; changes nothing
 #   ... | sudo sh -s -- --uninstall                          stops the server; keeps your data
-#   ... | sudo sh -s -- --domain maus.example.com <code>     also connects the server to MausBot with a one-time code
+#   ... | sudo sh -s -- --domain maus.example.com <code>     also connects the server to MoMo bot with a one-time code
 #
 # Nothing runs until the last line calls main, so a download that is cut off part-way runs nothing. It sends no
-# telemetry. The addresses it contacts are the ones the checks name: the image registries, Let's Encrypt, GitHub's
-# release list and this repository's files, and cloudflare.com/cdn-cgi/trace to learn this server's public address.
+# telemetry. The addresses it contacts are the ones the checks name: the image registries, Let's Encrypt, files from the MoMo bot repository, and cloudflare.com/cdn-cgi/trace to learn this server's public address.
 set -eu
 
 settings() {
   SYSROOT="${OMB_INSTALL_SYSROOT:-}"
-  INSTALL_DIR="${OMB_INSTALL_DIR:-/opt/openmausbot}"
-  IMAGE_REPO=milind-soni/openmausbot
-  RELEASES_URL=https://api.github.com/repos/milind-soni/OpenMausBot/releases/latest
-  ADMIN_URL="${MAUSBOT_ADMIN_URL:-https://cloud.openmausbot.com}"
-  SCRIPT_URL=https://raw.githubusercontent.com/milind-soni/OpenMausBot/main/deploy/install.sh
+  INSTALL_DIR="${OMB_INSTALL_DIR:-/opt/momobot}"
+  IMAGE_REPO=onewhitepaper/momo-bot
+  ADMIN_URL="${MAUSBOT_ADMIN_URL:-${MOMO_CLOUD_URL:-}}"
+  ADMIN_URL=${ADMIN_URL%/}
+  SCRIPT_URL=https://raw.githubusercontent.com/OneWhitepaper/MoMo-Bot/main/deploy/install.sh
   # Where the files this installer places come from: this repository at the tag of the version it installs, and at
   # main when that tag does not have them. OMB_INSTALL_SOURCE names one copy to use instead (https://… or file:///…).
-  REPOSITORY_FILES=https://raw.githubusercontent.com/milind-soni/OpenMausBot
+  REPOSITORY_FILES=https://raw.githubusercontent.com/OneWhitepaper/MoMo-Bot
   SOURCE_ASKED="${OMB_INSTALL_SOURCE:-}"
   SOURCE=""
   SOURCE_NAME=""
@@ -31,7 +30,7 @@ settings() {
   SANDBOX_WARN_ONLY="keyring-denied hostname-private cpu-list-readable fly-api-hidden egress-public-allowed"
   SECCOMP=seccomp-omb-home.json
   APPARMOR_PROFILE=omb-home-narrow
-  PROJECT=openmausbot
+  PROJECT=momobot-server
   MIN_DOCKER=24
   MIN_CPUS=2
   MIN_MEMORY_MB=3500
@@ -51,8 +50,6 @@ settings() {
   DOCKER_PROBLEM=""
   IMAGE=""
   PUBLIC_IP=""
-  REGISTRY_TOKEN=""
-  REGISTRY_STATUS=000
 }
 
 say() { printf '%s\n' "$*"; }
@@ -77,11 +74,12 @@ usage() {
   say "       $(command_line '--uninstall')                        stops the server; keeps your data"
   say ""
   say "  --domain NAME      the name people will open, already pointing at this server"
-  say "  --email ADDRESS    the first admin's email, so they can sign in with an emailed code"
+  say "  --email ADDRESS    the first admin's email (requires OMB_SIGNIN_SMTP_URL)"
+  say "  OMB_INSTALL_IMAGE  a release tag or digest, required for a new install"
   say "  --install-docker   install Docker with Docker's official script when it is missing, without asking"
-  say "  --dir PATH         where the install lives (default /opt/openmausbot)"
+  say "  --dir PATH         where the install lives (default /opt/momobot)"
   say "  --no-sandbox       do not prepare this server for the bots' sandbox (only for a server you alone sign in to)"
-  say "  <code>             the one-time code MausBot shows, to also connect this server to MausBot"
+  say "  <code>             connect to the Cloud origin set in MOMO_CLOUD_URL using a one-time code"
 }
 
 parse() {
@@ -126,11 +124,19 @@ parse() {
     *) fail "That email address doesn't look right. Give one address, like you@example.com." ;;
   esac
   case "$CODE" in
-    *[!A-Za-z0-9-]*) fail "That code doesn't look right. Copy the install command from MausBot again." ;;
+    *[!A-Za-z0-9-]*) fail "That code doesn't look right. Copy the install command from MoMo bot again." ;;
   esac
+  if [ -n "$CODE" ] && [ "$MODE" != uninstall ]; then
+    case "$ADMIN_URL" in
+      https://?*) case "${ADMIN_URL#https://}" in
+        *[!A-Za-z0-9.:-]*) fail "MOMO_CLOUD_URL must be an HTTPS origin, like https://cloud.example.com." ;;
+      esac ;;
+      *) fail "Set MOMO_CLOUD_URL to your Cloud origin before passing a connection code." ;;
+    esac
+  fi
   case "$INSTALL_DIR" in
     /?*) ;;
-    *) fail "--dir needs a full path, like /opt/openmausbot." ;;
+    *) fail "--dir needs a full path, like /opt/momobot." ;;
   esac
   case "$INSTALL_DIR" in
     *[!A-Za-z0-9/._-]*) fail "--dir may hold only letters, digits, / . _ and -." ;;
@@ -185,7 +191,7 @@ check_tools() {
 check_os() {
   release="$SYSROOT/etc/os-release"
   if [ ! -r "$release" ]; then
-    fix "This server's operating system can't be identified. MausBot's installer runs on Ubuntu 22.04 or 24.04: pick one of those."
+    fix "This server's operating system can't be identified. MoMo bot's installer runs on Ubuntu 22.04 or 24.04: pick one of those."
     return
   fi
   field() { sed -n "s/^$1=//p" "$release" | head -n 1 | tr -d '"'; }
@@ -199,7 +205,7 @@ check_os() {
       if [ "${OMB_INSTALL_ALLOW_UNTESTED_OS:-}" = 1 ]; then
         note "This server runs $os_name, which the installer is not tested on; going on as asked."
       else
-        fix "This server runs $os_name. MausBot's installer runs on Ubuntu 22.04 or 24.04: pick one of those, or run again with OMB_INSTALL_ALLOW_UNTESTED_OS=1 to try anyway."
+        fix "This server runs $os_name. MoMo bot's installer runs on Ubuntu 22.04 or 24.04: pick one of those, or run again with OMB_INSTALL_ALLOW_UNTESTED_OS=1 to try anyway."
       fi
       ;;
   esac
@@ -220,7 +226,7 @@ check_cpus() {
   if [ "$cpus" -ge "$MIN_CPUS" ]; then
     ok "processor cores: $cpus"
   else
-    fix "This server has $cpus processor core. MausBot needs at least $MIN_CPUS: pick a bigger server."
+    fix "This server has $cpus processor core. MoMo bot needs at least $MIN_CPUS: pick a bigger server."
   fi
 }
 
@@ -229,7 +235,7 @@ check_memory() {
   case "$memory_mb" in '' | *[!0-9]*) memory_mb=0 ;; esac
   memory_gb=$(awk -v m="$memory_mb" 'BEGIN { printf "%.1f", m / 1024 }')
   if [ "$memory_mb" -lt "$MIN_MEMORY_MB" ]; then
-    fix "This server has $memory_gb GB of memory. MausBot needs at least 4 GB: pick a bigger server."
+    fix "This server has $memory_gb GB of memory. MoMo bot needs at least 4 GB: pick a bigger server."
     return
   fi
   ok "memory: $memory_gb GB"
@@ -262,7 +268,7 @@ check_disk() {
   if [ "$least" -ge "$MIN_DISK_GB" ]; then
     ok "free disk: $least GB"
   else
-    fix "This server has only $least GB free at $least_place. MausBot needs at least $MIN_DISK_GB GB: free some space or add a disk."
+    fix "This server has only $least GB free at $least_place. MoMo bot needs at least $MIN_DISK_GB GB: free some space or add a disk."
   fi
 }
 
@@ -287,13 +293,13 @@ check_docker() {
   major=${server%%.*}
   case "$major" in '' | *[!0-9]*) major=0 ;; esac
   if [ "$major" -lt "$MIN_DOCKER" ]; then
-    fix "Docker $server is too old; MausBot needs Docker $MIN_DOCKER or newer. Update it with: curl -fsSL https://get.docker.com | sudo sh  and then run this again."
+    fix "Docker $server is too old; MoMo bot needs Docker $MIN_DOCKER or newer. Update it with: curl -fsSL https://get.docker.com | sudo sh  and then run this again."
     return
   fi
   security=$(docker info --format '{{json .SecurityOptions}}' 2>/dev/null || true)
   case "$security" in
     *rootless*)
-      fix "Docker runs in rootless mode here. MausBot needs the standard Docker service: run curl -fsSL https://get.docker.com | sudo sh  and then run this again."
+      fix "Docker runs in rootless mode here. MoMo bot needs the standard Docker service: run curl -fsSL https://get.docker.com | sudo sh  and then run this again."
       return
       ;;
   esac
@@ -378,10 +384,18 @@ check_dns() {
 }
 
 check_outbound() {
-  targets="https://ghcr.io/v2/ https://pkg-containers.githubusercontent.com/ https://registry-1.docker.io/v2/ https://auth.docker.io/ https://production.cloudflare.docker.com/ https://acme-v02.api.letsencrypt.org/directory"
+  targets="https://registry-1.docker.io/v2/ https://auth.docker.io/ https://production.cloudflare.docker.com/ https://acme-v02.api.letsencrypt.org/directory"
   if [ "$DOCKER_STATE" = missing ]; then targets="$targets https://get.docker.com/ https://download.docker.com/"; fi
   if [ -n "$CODE" ]; then targets="$targets $ADMIN_URL/"; fi
   case "${SOURCE_ASKED:-$REPOSITORY_FILES}" in https://*) targets="$targets https://$(host_of "${SOURCE_ASKED:-$REPOSITORY_FILES}")/" ;; esac
+  registry=${IMAGE%%/*}
+  if [ "$registry" != "$IMAGE" ]; then
+    case "$registry" in
+      localhost | localhost:*) ;;
+      ghcr.io) targets="$targets https://ghcr.io/v2/ https://pkg-containers.githubusercontent.com/" ;;
+      *.* | *:*) targets="$targets https://$registry/v2/" ;;
+    esac
+  fi
   blocked=""
   for url in $targets; do
     reachable "$url" || blocked="$blocked $(host_of "$url")"
@@ -394,10 +408,7 @@ check_outbound() {
     fi
     return
   fi
-  ok "outbound: the image registries and Let's Encrypt are reachable"
-  if ! reachable https://accounts.openmausbot.com/; then
-    note "accounts.openmausbot.com is not reachable, so signing in with an emailed code needs a mail server of your own (OMB_SIGNIN_SMTP_URL). Pairing codes work without it."
-  fi
+  ok "outbound: the container registries and Let's Encrypt are reachable"
 }
 
 check_userns() {
@@ -427,7 +438,7 @@ check_sandbox() {
 check_clock() {
   now=$(date -u +%s)
   theirs=""
-  header=$(curl -sSI --max-time 15 https://ghcr.io/v2/ 2>/dev/null | tr -d '\r' | sed -n 's/^[Dd]ate: //p' | head -n 1 || true)
+  header=$(curl -sSI --max-time 15 https://registry-1.docker.io/v2/ 2>/dev/null | tr -d '\r' | sed -n 's/^[Dd]ate: //p' | head -n 1 || true)
   if [ -n "$header" ]; then theirs=$(date -u -d "$header" +%s 2>/dev/null || true); fi
   case "$theirs" in '' | *[!0-9]*) theirs="" ;; esac
   if [ -z "$theirs" ]; then
@@ -450,126 +461,23 @@ check_clock() {
   fi
 }
 
-registry_token() {
-  curl -fsS --max-time 15 "https://ghcr.io/token?scope=repository:$IMAGE_REPO:pull" 2>/dev/null | sed -n 's/.*"token":"\([^"]*\)".*/\1/p' | head -n 1
-}
-
-# REGISTRY_STATUS: the registry's HTTP answer for a tag (200 it has it, 404 it does not), or 000 when it gave none.
-registry_ask() { # tag
-  REGISTRY_STATUS=000
-  for _ in 1 2 3; do
-    if [ -z "$REGISTRY_TOKEN" ]; then REGISTRY_TOKEN=$(registry_token || true); fi
-    if [ -n "$REGISTRY_TOKEN" ]; then
-      # The pull token goes to curl on its standard input, never on a command line.
-      REGISTRY_STATUS=$(printf 'header = "Authorization: Bearer %s"\n' "$REGISTRY_TOKEN" | curl -K - -s -o /dev/null -w '%{http_code}' --max-time 15 -I \
-        -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
-        "https://ghcr.io/v2/$IMAGE_REPO/manifests/$1" 2>/dev/null || true)
-      case "$REGISTRY_STATUS" in
-        200 | 404) return 0 ;;
-        401 | 403) REGISTRY_TOKEN="" ;;
-      esac
-    fi
-    sleep 2
-  done
-}
-
-registry_get() { # path-under-the-repository media-types: the registry's answer, the pull token on curl's standard input
-  printf 'header = "Authorization: Bearer %s"\n' "$REGISTRY_TOKEN" | curl -K - -fsSL --max-time 20 -H "Accept: $2" "https://ghcr.io/v2/$IMAGE_REPO/$1" 2>/dev/null
-}
-
-# Whether the image a tag or digest names runs the bots' sandbox (OMB_IMAGE=server in its settings), read from the
-# registry without downloading it: yes, no, or nothing when the registry did not say.
-registry_sandbox() { # tag or sha256:digest
-  [ -n "$REGISTRY_TOKEN" ] || REGISTRY_TOKEN=$(registry_token || true)
-  [ -n "$REGISTRY_TOKEN" ] || return 0
-  case "$(uname -m)" in aarch64 | arm64) platform=arm64 ;; *) platform=amd64 ;; esac
-  answer=$(registry_get "manifests/$1" "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json" | tr -d ' \n\r\t') || return 0
-  case "$answer" in
-    *'"manifests":['*)
-      # An index: one manifest per platform. Each entry ends with its platform, so the entries split at "},{".
-      digest=$(printf '%s' "$answer" | sed 's/},{/}\
-{/g' | grep "\"architecture\":\"$platform\"" | grep '"os":"linux"' | sed -n 's/.*"digest":"\(sha256:[0-9a-f]\{64\}\)".*/\1/p' | head -n 1)
-      [ -n "$digest" ] || return 0
-      answer=$(registry_get "manifests/$digest" "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json" | tr -d ' \n\r\t') || return 0
-      ;;
-  esac
-  config=$(printf '%s' "$answer" | sed -n 's/.*"config":{[^}]*"digest":"\(sha256:[0-9a-f]\{64\}\)".*/\1/p')
-  [ -n "$config" ] || return 0
-  case "$(registry_get "blobs/$config" "application/vnd.oci.image.config.v1+json, application/vnd.docker.container.image.v1+json")" in
-    '') ;;
-    *'"OMB_IMAGE=server"'*) echo yes ;;
-    *) echo no ;;
-  esac
-}
-
-# Says, before anything is downloaded, when the version chosen would run without the bots' sandbox.
-note_sandbox() { # tag or sha256:digest
-  [ "$SANDBOX" = yes ] || return 0
-  if [ "$(registry_sandbox "$1" || true)" = no ]; then
-    note "This version has no bots' sandbox, so bots would run beside the server, able to read its settings, keys and each other's files. That is only for a server you alone sign in to; run this again once a version with the sandbox is out."
-  fi
-}
-
-newest_release() {
-  curl -fsS --max-time 15 "$RELEASES_URL" 2>/dev/null | sed -n 's/.*"tag_name": *"\(v[0-9][0-9.]*\)".*/\1/p' | head -n 1
-}
-
-# The stable channel when it is published, else the newest release. Never `latest`, which follows every commit.
 check_version() {
   chosen="${OMB_INSTALL_IMAGE:-}"
-  if [ -n "$chosen" ]; then
-    case "$chosen" in
-      *[!A-Za-z0-9/:._@-]*)
-        fix "OMB_INSTALL_IMAGE is not an image name."
-        return
-        ;;
-    esac
-    case "${chosen##*/}" in
-      *:latest) fix "OMB_INSTALL_IMAGE names the latest tag, which follows every commit. Name a release, like ghcr.io/$IMAGE_REPO:v0.1.151." ;;
-      *:?*)
-        IMAGE=$chosen
-        ok "version: $IMAGE, as asked"
-        ;;
-      *) fix "OMB_INSTALL_IMAGE needs a release tag, like ghcr.io/$IMAGE_REPO:v0.1.151." ;;
-    esac
-    return
-  fi
-  pinned=$(env_value OMB_IMAGE)
-  case "$pinned" in
-    *@sha256:*)
-      IMAGE=$pinned
-      ok "version: the one update.sh pinned here; it stays until update.sh changes it"
-      return
-      ;;
+  IMAGE=${chosen:-$(env_value OMB_IMAGE)}
+  case "$IMAGE" in
+    '') fix "Set OMB_INSTALL_IMAGE to a MoMo bot image, for example ghcr.io/$IMAGE_REPO:v0.1.151, or build from this checkout with Docker Compose."; return ;;
+    *[!A-Za-z0-9/:._@-]* | -*) fix "OMB_INSTALL_IMAGE is not an image name."; return ;;
   esac
-  registry_ask stable
-  if [ "$REGISTRY_STATUS" = 200 ]; then
-    IMAGE="ghcr.io/$IMAGE_REPO:stable"
-    ok "version: the stable channel"
-    note_sandbox stable
-    return
+  case "${IMAGE##*/}" in
+    *:latest | *:stable) fix "OMB_INSTALL_IMAGE names a moving tag. Name a release tag or digest."; return ;;
+    *:?*) ;;
+    *) fix "OMB_INSTALL_IMAGE needs a release tag or digest."; return ;;
+  esac
+  if [ -n "$chosen" ]; then
+    ok "version: $IMAGE, as asked"
+  else
+    ok "version: the one already installed ($IMAGE)"
   fi
-  if [ "$REGISTRY_STATUS" != 404 ]; then
-    fix "The image registry ghcr.io did not say which versions exist (it answered $REGISTRY_STATUS). Check this server's outbound HTTPS, then run this again."
-    return
-  fi
-  release=$(newest_release || true)
-  if [ -z "$release" ]; then
-    fix "The newest MausBot release could not be read from api.github.com. Check this server's outbound HTTPS, then run this again in a few minutes."
-    return
-  fi
-  registry_ask "$release"
-  if [ "$REGISTRY_STATUS" = 404 ]; then
-    fix "MausBot $release has no server image yet. Run this again in a few minutes."
-    return
-  fi
-  if [ "$REGISTRY_STATUS" != 200 ]; then
-    fix "The image registry ghcr.io did not say whether it has MausBot $release (it answered $REGISTRY_STATUS). Run this again in a few minutes."
-    return
-  fi
-  IMAGE="ghcr.io/$IMAGE_REPO:$release"
-  ok "version: $release, the newest release"
-  note_sandbox "$release"
 }
 
 preflight() {
@@ -584,14 +492,14 @@ preflight() {
   check_ports
   check_userns
   check_sandbox
+  check_version
   if ! command -v curl >/dev/null 2>&1; then
-    note "The domain, outbound reach, the clock and the version were not checked, because they need curl."
+    note "The domain, outbound reach and clock were not checked, because they need curl."
     return
   fi
   check_dns
   check_outbound
   check_clock
-  check_version
 }
 
 install_docker() {
@@ -632,12 +540,12 @@ write_file() { # path, with the content on standard input: replaced in one step
 
 write_compose() {
   write_file "$INSTALL_DIR/compose.yaml" <<'COMPOSE'
-# Written by MausBot's installer (deploy/install.sh), and written again each time it runs: put your own settings in
+# Written by the MoMo bot installer (deploy/install.sh), and written again each time it runs: put your own settings in
 # .env beside this file, which the installer keeps. The server only listens on loopback inside its container, and on
 # two Unix sockets in the `edge` volume, which Caddy, in its own container, reaches it through. A request on a socket is
 # always a remote one to the server. Caddy does not share the server's network: a server that restarted on its own came
 # back in a new one, and left Caddy refusing HTTPS in the old one.
-name: openmausbot
+name: momobot-server
 services:
   omb:
     image: ${OMB_IMAGE:?run the installer again}
@@ -647,10 +555,6 @@ services:
     volumes:
       - ./data:/data
       - edge:/run/openmausbot
-      # The Update server button (update-runner.sh, root's folder): the server leaves a request in the first, reads the
-      # outcome in the second.
-      - /var/lib/openmausbot-update/request:/run/omb-update/request
-      - /var/lib/openmausbot-update/status:/run/omb-update/status:ro
     environment:
       OMB_PORT: "8799"
       OMB_WEBHOOK_PORT: "8800"
@@ -664,7 +568,7 @@ services:
       OMB_SIGNIN_MEMBER_EMAILS:
       OMB_SIGNIN_SMTP_URL:
       OMB_SIGNIN_SMTP_FROM:
-      # "1": phones pair by QR through MausBot Relay. Sign in once: docker compose exec omb openmausbot login --relay
+      OMB_CONTROL_PLANE_URL:
       OMB_PHONE_RELAY:
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8799/api/health | grep -q openmausbot"]
@@ -749,7 +653,7 @@ unset_env() { # name
 write_settings() {
   if [ ! -f "$INSTALL_DIR/.env" ]; then
     write_file "$INSTALL_DIR/.env" 600 <<'ENV'
-# MausBot's settings on this server. The installer sets DOMAIN, OMB_IMAGE and COMPOSE_FILE and keeps every other line.
+# MoMo bot's settings on this server. The installer sets DOMAIN, OMB_IMAGE and COMPOSE_FILE and keeps every other line.
 # Who may sign in with an emailed code: OMB_SIGNIN_EMAILS (admins) and OMB_SIGNIN_MEMBER_EMAILS, comma-separated.
 ENV
   fi
@@ -793,7 +697,7 @@ from_repository() { # what-to-fetch
   version=$(image_version || true)
   if [ -n "$version" ]; then
     SOURCE="$REPOSITORY_FILES/$version"
-    SOURCE_NAME="MausBot $version's own"
+    SOURCE_NAME="MoMo bot $version's own"
     if "$1"; then return 0; fi
   fi
   SOURCE="$REPOSITORY_FILES/main"
@@ -808,32 +712,6 @@ fetch_update() {
 # update.sh (deploy/update.sh) updates with a backup and a way back; it is this repository's file, placed as it is.
 place_update() {
   if from_repository fetch_update; then note "update.sh is $SOURCE_NAME."; fi
-}
-
-fetch_runner() {
-  fetch deploy/update-runner.sh "$INSTALL_DIR/update-runner.sh" 755
-}
-
-data_owner() { # the data folder's user and group, as numbers: the server's container runs as them
-  stat -c '%u:%g' "$INSTALL_DIR/data" 2>/dev/null || stat -f '%u:%g' "$INSTALL_DIR/data" 2>/dev/null
-}
-
-# The Update server button: update-runner.sh (deploy/update-runner.sh) has systemd run update.sh when the server asks,
-# and nothing else. Without it, or without systemd, the app shows the command to run here instead.
-place_button() {
-  [ -f "$INSTALL_DIR/update.sh" ] || return 0
-  if ! from_repository fetch_runner; then
-    note "The app cannot update this server: update-runner.sh could not be downloaded. Update it with: sudo $INSTALL_DIR/update.sh"
-    return 0
-  fi
-  button_log=$(mktemp)
-  if sh "$INSTALL_DIR/update-runner.sh" --install --dir "$INSTALL_DIR" --user "$(data_owner)" --no-restart >"$button_log" 2>&1; then
-    note "The app can update this server: Settings, Updates, Update server."
-  else
-    reason=$(tail -n 1 "$button_log")
-    note "The app cannot update this server${reason:+ ($reason)}. Update it with: sudo $INSTALL_DIR/update.sh"
-  fi
-  rm -f "$button_log"
 }
 
 # The sandbox's host preparation and Compose settings are this repository's own (deploy/box, connector/profiles),
@@ -863,7 +741,7 @@ prepare_sandbox() {
   if ! image_has_sandbox; then
     unset_env COMPOSE_FILE
     SANDBOX=absent
-    note "This MausBot version has no bots' sandbox yet. Run this command again after updating to a version that has it."
+    note "This MoMo bot version has no bots' sandbox yet. Run this command again after updating to a version that has it."
     return
   fi
   if ! from_repository fetch_sandbox; then
@@ -890,11 +768,11 @@ check_sandbox_runs() {
   report=$(compose exec -T omb node dist-server/bot-box/box-check.js --public=none 2>/dev/null | tr -d '\n' || true)
   case "$report" in
     *'"box":"bwrap"'*'"results":[{'*) ;;
-    *) fail "MausBot is running, but its bots' sandbox gave no answer to its self-check, so bots may not be separated from the server. $see" ;;
+    *) fail "MoMo bot is running, but its bots' sandbox gave no answer to its self-check, so bots may not be separated from the server. $see" ;;
   esac
   case "$report" in
     *'"id":"config-hidden","ok":true'*) ;;
-    *) fail "MausBot is running, but its sandbox self-check did not show that a bot cannot read the server's settings (config-hidden), so bots are not safely separated from the server. $see" ;;
+    *) fail "MoMo bot is running, but its sandbox self-check did not show that a bot cannot read the server's settings (config-hidden), so bots are not safely separated from the server. $see" ;;
   esac
   stopping=""
   set -f
@@ -925,7 +803,7 @@ check_sandbox_runs() {
       *) case "$report" in *'"ok":false'*) ;; *) stopping=" checks it did not name," ;; esac ;;
     esac
   fi
-  [ -z "$stopping" ] || fail "MausBot is running, but its bots' sandbox failed its self-check:${stopping%,}. Bots are not safely separated from the server. $see"
+  [ -z "$stopping" ] || fail "MoMo bot is running, but its bots' sandbox failed its self-check:${stopping%,}. Bots are not safely separated from the server. $see"
   say "The bots' sandbox is on: a bot cannot read the server's settings, keys or other bots' files."
 }
 
@@ -935,7 +813,7 @@ prepare_data() {
   owner=$(docker run --rm --network none --entrypoint id "$IMAGE" -u 2>/dev/null || true)
   group=$(docker run --rm --network none --entrypoint id "$IMAGE" -g 2>/dev/null || true)
   case "$owner:$group" in
-    *[!0-9:]* | : | :* | *:) fail "The MausBot image did not say which user it runs as. Run this again; if it still fails, send us this line." ;;
+    *[!0-9:]* | : | :* | *:) fail "The MoMo bot image did not say which user it runs as. Run this again; if it still fails, send us this line." ;;
   esac
   mkdir -m 700 "$INSTALL_DIR/data"
   chown "$owner:$group" "$INSTALL_DIR/data"
@@ -985,31 +863,30 @@ make_folders() { # folder...
 
 install_server() {
   say ""
-  say "Installing MausBot in $INSTALL_DIR..."
+  say "Installing MoMo bot in $INSTALL_DIR..."
   if [ -d "$INSTALL_DIR/data" ]; then close_to_others "$INSTALL_DIR/data"; fi
   make_folders "$INSTALL_DIR" "$INSTALL_DIR/caddy" "$INSTALL_DIR/caddy/data" "$INSTALL_DIR/caddy/config"
   write_compose
   write_caddyfile
   write_settings
-  say "Downloading MausBot..."
-  compose_quietly pull -q || fail "MausBot could not be downloaded (Docker's message is above). Check this server's outbound HTTPS, then run this again."
+  say "Downloading MoMo bot..."
+  compose_quietly pull -q --policy missing || fail "MoMo bot could not be downloaded (Docker's message is above). Check this server's outbound HTTPS, then run this again."
   place_update
   prepare_sandbox
   prepare_data
-  place_button
-  say "Starting MausBot..."
-  compose_quietly up -d --remove-orphans || fail "MausBot could not be started (Docker's message is above). Fix that, then run this again."
-  wait_healthy || fail "MausBot started but did not report healthy within $HEALTH_WAIT_S seconds. Its log: cd $INSTALL_DIR && sudo docker compose logs omb --tail 50"
+  say "Starting MoMo bot..."
+  compose_quietly up -d --no-build --pull never --remove-orphans || fail "MoMo bot could not be started (Docker's message is above). Fix that, then run this again."
+  wait_healthy || fail "MoMo bot started but did not report healthy within $HEALTH_WAIT_S seconds. Its log: cd $INSTALL_DIR && sudo docker compose logs omb --tail 50"
   check_sandbox_runs
   say "Waiting for the HTTPS certificate of $DOMAIN..."
-  wait_https || fail "MausBot is running, but https://$DOMAIN did not answer within $HTTPS_WAIT_S seconds, usually because the certificate could not be issued. Check that $DOMAIN points at this server and that ports 80 and 443 are open in your provider's firewall, then run this again. Caddy's reason: cd $INSTALL_DIR && sudo docker compose logs caddy --tail 30"
+  wait_https || fail "MoMo bot is running, but https://$DOMAIN did not answer within $HTTPS_WAIT_S seconds, usually because the certificate could not be issued. Check that $DOMAIN points at this server and that ports 80 and 443 are open in your provider's firewall, then run this again. Caddy's reason: cd $INSTALL_DIR && sudo docker compose logs caddy --tail 30"
 }
 
-# The connector has its own installer, which MausBot serves with its address and the connector's image filled in.
+# The connector has its own installer, which MoMo bot serves with its address and the connector's image filled in.
 # It is run as it is, with the code.
 connect_server() {
   say ""
-  say "Connecting this server to MausBot..."
+  say "Connecting this server to MoMo bot..."
   connector_script="${MAUSBOT_CONNECTOR_INSTALLER:-}"
   fetched=""
   if [ -z "$connector_script" ]; then
@@ -1017,12 +894,12 @@ connect_server() {
     connector_script=$fetched
     if ! curl -fsSL --max-time 60 "$ADMIN_URL/install.sh" -o "$connector_script"; then
       rm -f "$fetched"
-      fail "MausBot is installed and running here, but the connector's installer could not be downloaded from $ADMIN_URL. Nothing needs reinstalling: run this again with your code once that address answers."
+      fail "MoMo bot is installed and running here, but the connector's installer could not be downloaded from $ADMIN_URL. Nothing needs reinstalling: run this again with your code once that address answers."
     fi
   fi
   if ! grep -q 'mausbot-connector' "$connector_script" 2>/dev/null; then
     [ -z "$fetched" ] || rm -f "$fetched"
-    fail "MausBot is installed and running here, but what $ADMIN_URL sent is not the connector's installer. Nothing needs reinstalling: copy the install command from MausBot again."
+    fail "MoMo bot is installed and running here, but what $ADMIN_URL sent is not the connector's installer. Nothing needs reinstalling: copy the install command from MoMo bot again."
   fi
   # Always customer-run, on this install's folder (--dir included): the connector attaches to the server installed here
   # and never starts a second one beside it. A connector installer that does not know --customer-run refuses it, and
@@ -1034,22 +911,22 @@ connect_server() {
     MAUSBOT_ADMIN_URL="$ADMIN_URL" MAUSBOT_INSTALL_DIR="$INSTALL_DIR" sh "$connector_script" "$CODE" --customer-run || status=$?
   fi
   [ -z "$fetched" ] || rm -f "$fetched"
-  [ "$status" = 0 ] || fail "MausBot is installed and running here, but connecting it did not finish (the reason is above). Nothing needs reinstalling: fix that and run this again with a new code."
+  [ "$status" = 0 ] || fail "MoMo bot is installed and running here, but connecting it did not finish (the reason is above). Nothing needs reinstalling: fix that and run this again with a new code."
 }
 
 # The first admin's one-time sign-in link, as `openmausbot pair` prints it: its code line (until when it works) and the
 # link. Nothing when the server would not make one.
 first_admin_link() {
-  made=$(compose exec -T omb openmausbot pair --label "First admin" 2>/dev/null) || return 1
+  made=$(compose exec -T omb momobot pair --label "First admin" 2>/dev/null) || return 1
   lines=$(printf '%s\n' "$made" | grep -E '^(Pairing code|Link) ' || true)
   case "$lines" in *"Link "*"https://$DOMAIN/pair#code="*) printf '%s\n' "$lines" | sed 's/^/  /' ;; *) return 1 ;; esac
 }
 
 finish() {
   say ""
-  say "MausBot is running at https://$DOMAIN"
+  say "MoMo bot is running at https://$DOMAIN"
   say ""
-  pair_command="cd $INSTALL_DIR && sudo docker compose exec omb openmausbot pair --label \"First admin\""
+  pair_command="cd $INSTALL_DIR && sudo docker compose exec omb momobot pair --label \"First admin\""
   # Only to a terminal: in a log, the link would let whoever reads it sign in as the admin until it is used or expires.
   if [ -t 1 ] && link=$(first_admin_link); then
     say "To sign in as the first admin, open this one-time link in your browser. Anyone who has it can use it, once:"
@@ -1062,11 +939,15 @@ finish() {
   fi
   admins=$(env_value OMB_SIGNIN_EMAILS)
   if [ -n "$admins" ]; then
-    say "Or open https://$DOMAIN/pair and sign in with an emailed code as: $admins"
+    if [ -n "$(env_value OMB_SIGNIN_SMTP_URL)" ] || [ -n "$(env_value OMB_CONTROL_PLANE_URL)" ]; then
+      say "Or open https://$DOMAIN/pair and sign in with an emailed code as: $admins"
+    else
+      note "To use email sign-in, configure OMB_SIGNIN_SMTP_URL or OMB_CONTROL_PLANE_URL in $INSTALL_DIR/.env."
+    fi
   fi
   say ""
   if [ -x "$INSTALL_DIR/update.sh" ]; then
-    say "To update later, with a backup first and a way back:  sudo $INSTALL_DIR/update.sh"
+    say "To update later, with a backup first and a way back:  sudo $INSTALL_DIR/update.sh --image REGISTRY/IMAGE:TAG"
   else
     say "To update later, run this command again."
   fi
@@ -1097,18 +978,17 @@ run_check() {
     fail "This server is not ready: fix the $FAILED line(s) marked FIX above. Nothing was changed."
   fi
   say ""
-  say "This server is ready for MausBot. Nothing was changed."
+  say "This server is ready for MoMo bot. Nothing was changed."
 }
 
 # Stops the server and removes its containers. The data, the settings and the certificates stay where they are.
 run_uninstall() {
   need_root --uninstall
-  [ -f "$INSTALL_DIR/compose.yaml" ] || fail "MausBot isn't installed in $INSTALL_DIR, so there is nothing to stop."
-  command -v docker >/dev/null 2>&1 || fail "Docker isn't installed here, so MausBot isn't running. Your data is in $INSTALL_DIR/data."
-  say "Stopping MausBot..."
-  compose_quietly down --remove-orphans || fail "MausBot could not be stopped (Docker's message is above)."
-  if [ -f "$INSTALL_DIR/update-runner.sh" ]; then sh "$INSTALL_DIR/update-runner.sh" --remove --dir "$INSTALL_DIR" >/dev/null 2>&1 || true; fi
-  say "MausBot is stopped and its containers are removed."
+  [ -f "$INSTALL_DIR/compose.yaml" ] || fail "MoMo bot isn't installed in $INSTALL_DIR, so there is nothing to stop."
+  command -v docker >/dev/null 2>&1 || fail "Docker isn't installed here, so MoMo bot isn't running. Your data is in $INSTALL_DIR/data."
+  say "Stopping MoMo bot..."
+  compose_quietly down --remove-orphans || fail "MoMo bot could not be stopped (Docker's message is above)."
+  say "MoMo bot is stopped and its containers are removed."
   say "Your data is kept in $INSTALL_DIR/data, your settings in $INSTALL_DIR/.env and the HTTPS certificates in $INSTALL_DIR/caddy."
   say "To start it again: $(command_line "--domain $(env_value DOMAIN)")"
   say "This command never deletes your data. To delete it yourself: sudo rm -rf $INSTALL_DIR"
@@ -1116,7 +996,7 @@ run_uninstall() {
     say "The sandbox's two profiles stay on this server: /etc/mausbot/$SECCOMP and /etc/apparmor.d/$APPARMOR_PROFILE."
   fi
   if [ -n "$(docker ps -aq --filter name=mausbot-connector 2>/dev/null || true)" ]; then
-    say "This server is still connected to MausBot. To disconnect it, run the uninstall command MausBot shows for the connector."
+    say "This server is still connected to MoMo bot. To disconnect it, run the uninstall command MoMo bot shows for the connector."
   fi
 }
 

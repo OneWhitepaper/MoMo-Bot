@@ -3,7 +3,8 @@ import { Building2, Check } from "lucide-react";
 import type { ManagedDesktopBridge, ManagedDesktopState } from "../../../../electron/managed-desktop.mjs";
 import { productName } from "@/lib/brand";
 import { t } from "@/lib/i18n";
-import { companyModelCount, DEFAULT_ADMIN_ORIGIN } from "@/lib/onboarding";
+import { configuredOrganizationOrigin } from "@/lib/app-links";
+import { companyModelCount } from "@/lib/onboarding";
 import { staggerIndex } from "./shared";
 
 const linkClass = "w-fit text-[12px] text-ink-secondary underline-offset-2 transition-colors hover:text-ink hover:underline";
@@ -80,6 +81,7 @@ export function OrganisationRow({
   if (!connection) return null;
   const count = companyModelCount(connection);
   const name = connection.organization?.name;
+  const portalOrigin = configuredOrganizationOrigin();
 
   let body: React.ReactNode;
   let action: React.ReactNode = null;
@@ -90,16 +92,16 @@ export function OrganisationRow({
           <span className="font-medium text-ink">{t("onboarding.org.title", { app: productName() })}</span>{" "}
           {t("onboarding.org.body")}
         </p>
-        <button type="button" onClick={onOpenSettings} className={linkClass}>
+        {portalOrigin && <button type="button" onClick={onOpenSettings} className={linkClass}>
           {t("onboarding.org.otherAddress")}
-        </button>
+        </button>}
       </>
     );
     action = (
       <button
         type="button"
         disabled={busy}
-        onClick={() => void perform(() => bridge.begin({ portalOrigin: DEFAULT_ADMIN_ORIGIN }))}
+        onClick={() => portalOrigin ? void perform(() => bridge.begin({ portalOrigin })) : onOpenSettings()}
         className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-white transition-[filter] hover:brightness-110 disabled:opacity-50"
       >
         {busy ? t("organization.working") : t("onboarding.org.signIn")}

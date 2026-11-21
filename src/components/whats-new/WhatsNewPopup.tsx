@@ -90,14 +90,16 @@ export function WhatsNewPopup({ view, report, onBuy, onDone }: {
   });
 
   const buy = (of: WhatsNewSlide) => { report(of === "pro" ? "get_pro" : "start_team", of); onBuy(of); onDone(); };
+  const cloudUrl = newCloudUrl(view.staging);
+  const teamUrl = startTeamUrl(view.staging);
   const actions = (of: WhatsNewSlide): ReactNode => of === "pro"
     ? <>
       <button type="button" className={cn(PRIMARY, "ui-button-lg")} onClick={() => buy("pro")}>{t("cloudBuy.card.get", { plan: view.plans.pro?.name ?? "Pro" })}</button>
-      <LinkButton url={newCloudUrl(view.staging)} label={t("whatsNew.cloud.see")} className={cn(QUIET, "ui-button-lg gap-1.5")} onOpened={() => end("see_cloud")} />
+      {cloudUrl && <LinkButton url={cloudUrl} label={t("whatsNew.cloud.see")} className={cn(QUIET, "ui-button-lg gap-1.5")} onOpened={() => end("see_cloud")} />}
     </>
-    : view.audience === "own"
+    : view.audience === "own" || !teamUrl
       ? <button type="button" className={cn(PRIMARY, "ui-button-lg")} onClick={() => buy("team")}>{t("whatsNew.team.start")}</button>
-      : <LinkButton url={startTeamUrl(view.staging)} label={t("whatsNew.team.start")} className={cn(PRIMARY, "ui-button-lg gap-1.5")} onOpened={() => end("start_team")} />;
+      : <LinkButton url={teamUrl} label={t("whatsNew.team.start")} className={cn(PRIMARY, "ui-button-lg gap-1.5")} onOpened={() => end("start_team")} />;
 
   return <div className="ui-scrim fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6" onMouseDown={event => { if (event.target === event.currentTarget) end("close"); }}>
     <div role="dialog" aria-modal="true" aria-labelledby={titleId(slide)} data-whats-new={slide} tabIndex={-1}

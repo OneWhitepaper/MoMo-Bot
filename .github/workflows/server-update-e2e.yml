@@ -36,10 +36,21 @@ jobs:
           persist-credentials: false
       - name: shellcheck
         run: shellcheck -S warning deploy/update.sh deploy/update-runner.sh deploy/e2e/update.sh
+      - name: Stage two server revisions in a registry on the runner
+        run: |
+          set -euo pipefail
+          docker run -d --name momo-fixture-registry -p 127.0.0.1:5000:5000 registry:2
+          docker build --target server -t momobot-fixture:base .
+          for revision in 0.1.150 0.1.151; do
+            image="localhost:5000/momobot-fixture:v$revision"
+            printf 'FROM momobot-fixture:base\nENV OMB_APP_VERSION=%s\nLABEL org.opencontainers.image.version=%s\n' "$revision" "$revision" |
+              docker build -f - -t "$image" .
+            docker push "$image"
+          done
       - name: Update, roll back and recover
         env:
           LAYOUT: ${{ matrix.layout }}
-        run: sudo env LAYOUT="$LAYOUT" OUT="$RUNNER_TEMP/evidence" bash deploy/e2e/update.sh
+        run: sudo env CI=true LAYOUT="$LAYOUT" OUT="$RUNNER_TEMP/evidence" bash deploy/e2e/update.sh
       - name: Keep what the script said
         if: always()
         run: sudo chmod -R a+rX "$RUNNER_TEMP/evidence" || true

@@ -1,14 +1,13 @@
 ---
 title: Data and backups
-description: Know what MausBot stores locally and what to preserve.
+description: Know what MoMo bot stores locally and what to preserve.
 icon: DatabaseBackup
 ---
 
-MausBot keeps its application state in its data folder, including configuration, transcripts, message attachments, device pairing state, and the SQLite message store. Where that folder is:
+MoMo bot keeps its application state in its data folder, including configuration, transcripts, message attachments, device pairing state, and the SQLite message store. Where that folder is:
 
-- The desktop app and an npm install: `~/.openmausbot` (`OMB_DATA_DIR` names another). In the desktop app, workspaces you add are in `~/.openmausbot-profiles/` (`<that folder>-profiles` with `OMB_DATA_DIR`); once this computer's bots have moved to My Cloud, This Mac's (or This PC's) is there too, as `default`, and `~/.openmausbot` keeps the copy from before the move.
-- The Docker image: `/data/.openmausbot` inside the container, on its `data` volume (named `deploy_data` with path B's `deploy/docker-compose.yml`, `openmausbot_data` with the repository's root `compose.yaml`).
-- A server set up with the installer: `/opt/openmausbot/data/.openmausbot` on the server, a folder rather than a volume.
+- Native and desktop installs use `~/.momobot` unless `OMB_DATA_DIR` is set. Additional desktop workspaces are under `~/.momobot-profiles`, or `<your-data-directory>-profiles` with an override.
+- For a container, use the directory set by `OMB_DATA_DIR` on its persistent volume. The source Dockerfile uses `/data/.momobot`.
 
 ## Move from the desktop app
 
@@ -70,7 +69,7 @@ replaced. Type **REPLACE** to confirm, then fully quit and reopen the desktop ap
 or restart the hosted server process. Closing a desktop window is not enough.
 
 Restore **replaces**, rather than combines, workspace data. The previous data is
-kept under `.openmausbot/.backups/safety-<restore-id>/`. A failed or interrupted
+kept under `.momobot/.backups/safety-<restore-id>/`. A failed or interrupted
 replacement recovers the previous files before the server loads them. Keep that
 safety directory until you have checked the restored workspace. It contains
 private data; do not share it.
@@ -111,7 +110,7 @@ paths are not copied or rewritten; check them when moving between computers.
 
 ## Filesystem-level backups
 
-Close MausBot before taking a filesystem-level backup so SQLite and configuration files are captured consistently. Preserve the entire `.openmausbot` directory rather than selecting individual database files.
+Close MoMo bot before taking a filesystem-level backup so SQLite and configuration files are captured consistently. Preserve the entire data directory rather than selecting individual database files.
 
 Raw filesystem snapshots differ from Settings exports: they may include saved
 credentials, CLI homes and browser sessions. A Docker snapshot of the whole
@@ -123,7 +122,7 @@ Restore with the server stopped, preserving the original paths and ownership, th
 
 ## The settings file and its dated copies
 
-Every save of `~/.openmausbot/config.json` keeps a copy of the file as it was,
+Every save of `~/.momobot/config.json` keeps a copy of the file as it was,
 named `config.json.bak.YYYYMMDD-HHMMSS`, beside it; the last ten are kept. A
 save never replaces a settings file it could not read or understand: it fails
 and says so, so a file that cannot be read is never overwritten by a partial
@@ -133,8 +132,8 @@ is never replaced without a copy of it to go back to.
 To go back to an earlier copy, stop the server and run:
 
 ```
-openmausbot config backups
-openmausbot config restore latest
+momobot config backups
+momobot config restore latest
 ```
 
 The file a restore replaces is kept as a dated copy too, so the restore can be

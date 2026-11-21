@@ -56,27 +56,14 @@ function requireExecutable(file) {
   }
 }
 
-// electron-updater picks its installer from resources/package-type ("deb" →
-// DebUpdater, absent → AppImageUpdater), and the app's updater reads the same
-// marker; a marker in both artifacts (or neither) silently inverts the routing.
-function requirePackageType(resources, label, expected) {
-  const marker = path.join(resources, "package-type");
-  const found = statSync(marker, { throwIfNoEntry: false })?.isFile()
-    ? readFileSync(marker, "utf8").trim()
-    : null;
-  if (found !== expected) {
-    fail(
-      `${label} package-type marker is ${JSON.stringify(found)}, expected ${JSON.stringify(expected)}`,
-    );
+function verifyDesktopResources(resources, label) {
+  for (const relative of ["app-update.yml", "package-type", "server/enterprise", "enterprise"]) {
+    if (lstatSync(path.join(resources, relative), { throwIfNoEntry: false })) {
+      fail(`${label} includes an unexpected resource: ${relative}`);
+    }
   }
-}
-
-function requireUpdaterTarget(resources, label) {
-  const updateFile = path.join(resources, "app-update.yml");
-  requireFile(updateFile);
-  const update = readFileSync(updateFile, "utf8");
-  if (!/^owner: milind-soni$/m.test(update) || !/^repo: OpenMausBot$/m.test(update)) {
-    fail(`${label} app-update.yml does not point at milind-soni/OpenMausBot`);
+  for (const relative of ["licenses/MoMo-bot-LICENSE.txt", "licenses/MoMo-bot-NOTICE.txt"]) {
+    requireFile(path.join(resources, relative));
   }
 }
 
@@ -402,7 +389,7 @@ const appImage = exactlyOne(".AppImage");
 const deb = exactlyOne(".deb");
 const rpm = exactlyOne(".rpm");
 const unpacked = path.join(releaseDir, "linux-unpacked");
-const executable = path.join(unpacked, "openmausbot");
+const executable = path.join(unpacked, "momobot");
 const resources = path.join(unpacked, "resources");
 
 requireExecutable(appImage);
@@ -418,7 +405,7 @@ for (const forbidden of ["speech-helper", "cua-driver", "cua-sdk"]) {
 }
 const unpackedCuaHashes = verifyCuaResources(resources, "linux-unpacked");
 const unpackedCloudflaredHash = verifyCloudflaredResources(resources, "linux-unpacked");
-requireUpdaterTarget(resources, "linux-unpacked");
+verifyDesktopResources(resources, "linux-unpacked");
 
 const fields = execFileSync(
   "dpkg-deb",
@@ -426,9 +413,9 @@ const fields = execFileSync(
   { encoding: "utf8" },
 );
 for (const expected of [
-  "Package: openmausbot",
+  "Package: momobot",
   "Architecture: amd64",
-  "Maintainer: Milind Soni",
+  "Maintainer: OneWhitepaper",
   "Section: utils",
   "Priority: optional",
 ]) {
@@ -436,13 +423,11 @@ for (const expected of [
 }
 
 // The DEB and RPM install the same tree under /opt; check what each extracted.
-function verifySystemPackage(extracted, label, packageType) {
-  const appRoot = path.join(extracted, "opt", "OpenMausBot");
+function verifySystemPackage(extracted, label) {
+  const appRoot = path.join(extracted, "opt", "MoMo bot");
   requireDirectoryMode(appRoot, 0o755);
   const packageResources = path.join(appRoot, "resources");
-  // Routes the in-app updater to the package-manager hand-off.
-  requirePackageType(packageResources, label, packageType);
-  requireUpdaterTarget(packageResources, label);
+  verifyDesktopResources(packageResources, label);
   const packageHashes = verifyCuaResources(packageResources, label);
   const packageCloudflaredHash = verifyCloudflaredResources(packageResources, label);
   if (packageCloudflaredHash !== unpackedCloudflaredHash) {
@@ -457,27 +442,23 @@ function verifySystemPackage(extracted, label, packageType) {
     "usr",
     "share",
     "applications",
-    "com.openmausbot.app.desktop",
-  );
-  const scalableIcon = path.join(
-    extracted,
-    "usr",
-    "share",
-    "icons",
-    "hicolor",
-    "scalable",
-    "apps",
-    "openmausbot.svg",
+    "com.onewhitepaper.momobot.desktop",
   );
   requireFile(desktopFile);
-  requireFile(scalableIcon);
+  for (const size of [16, 32, 48, 128, 256, 512]) {
+    const icon = path.join(extracted, "usr", "share", "icons", "hicolor", `${size}x${size}`, "apps", "momobot.png");
+    const sourceIcon = path.join(root, "build", "icons", `${size}x${size}.png`);
+    requireFile(icon);
+    if (sha256(icon) !== sha256(sourceIcon)) fail(`${label} packaged a different ${size}px icon`);
+  }
   const desktop = readFileSync(desktopFile, "utf8");
   for (const expected of [
-    "Name=OpenMausBot",
-    "Exec=/opt/OpenMausBot/openmausbot %U",
-    "Icon=openmausbot",
-    "StartupWMClass=com.openmausbot.app",
+    "Name=MoMo bot",
+    'Exec="/opt/MoMo bot/momobot" %U',
+    "Icon=momobot",
+    "StartupWMClass=com.onewhitepaper.momobot",
     "Categories=Utility;",
+    "MimeType=x-scheme-handler/momobot;",
   ]) {
     if (!desktop.includes(expected)) fail(`${label} desktop entry is missing ${JSON.stringify(expected)}`);
   }
@@ -487,7 +468,7 @@ function verifySystemPackage(extracted, label, packageType) {
 const extracted = mkdtempSync(path.join(tmpdir(), "omb-deb-verify-"));
 try {
   execFileSync("dpkg-deb", ["--extract", deb, extracted]);
-  verifySystemPackage(extracted, "DEB", "deb");
+  verifySystemPackage(extracted, "DEB");
 } finally {
   rmSync(extracted, { recursive: true, force: true });
 }
@@ -498,7 +479,7 @@ const rpmFields = execFileSync(
   { encoding: "utf8" },
 );
 for (const expected of [
-  "Name: openmausbot",
+  "Name: momobot",
   "Arch: x86_64",
   `Version: ${JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version}`,
 ]) {
@@ -513,7 +494,7 @@ const rpmScripts = new Map(
 );
 for (const [scriptlet, line] of [
   ["postinstall", "repair_chromium_sandbox \"$APP_ROOT/chrome-sandbox\""],
-  ["postuninstall", "profile=$APPARMOR_DIR/openmausbot-browser"],
+  ["postuninstall", "profile=$APPARMOR_DIR/momobot-browser"],
 ]) {
   if (!rpmScripts.get(scriptlet)?.includes(line)) {
     fail(`RPM ${scriptlet} scriptlet does not run the Linux package hook`);
@@ -535,7 +516,7 @@ try {
     cwd: payload,
     stdio: ["ignore", "ignore", "inherit"],
   });
-  verifySystemPackage(payload, "RPM", "rpm");
+  verifySystemPackage(payload, "RPM");
 } finally {
   rmSync(rpmExtracted, { recursive: true, force: true });
 }
@@ -560,9 +541,7 @@ try {
     );
   }
   const appImageResources = path.join(squashRoot, "resources");
-  // No marker: the AppImage keeps the in-place restart-to-update path.
-  requirePackageType(appImageResources, "AppImage", null);
-  requireUpdaterTarget(appImageResources, "AppImage");
+  verifyDesktopResources(appImageResources, "AppImage");
   // Depending on the pinned appimagetool runtime, SquashFS directories are
   // emitted as root:root 0755 or 0775. Require one mode consistently across
   // the reviewed resource tree. The app never executes through that path:

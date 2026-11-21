@@ -5,6 +5,7 @@ import { createSocket } from "node:dgram";
 import { hostname, networkInterfaces } from "node:os";
 
 import { lanInterfaces } from "./listener.ts";
+import { PRODUCT_NAME } from "./product-brand.ts";
 import { directRoutes, isPrivateLanAddress, isTailnetAddress, tailnetInterfaceAddresses } from "./direct-routes.ts";
 
 const MDNS_ADDRESS = "224.0.0.251";
@@ -327,7 +328,7 @@ export function answersFor(
 
 
 /** No dots, no control characters, at most 63 bytes of UTF-8. */
-export function dnsLabel(text: string, fallback = "OpenMausBot"): string {
+export function dnsLabel(text: string, fallback: string = PRODUCT_NAME): string {
   let label = text
     // oxlint-disable-next-line no-control-regex -- control characters are not valid in a DNS label
     .replace(/[\u0000-\u001f\u007f]/g, "")

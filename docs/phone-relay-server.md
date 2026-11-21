@@ -138,11 +138,11 @@ the server's kind, `{appVersion, devices: {e2e, legacy}, kind: "server"}`. A
 control plane older than `kind` answers `400 invalid_request`; the server then
 asks once more without it.
 
-A server qualifies today; no control plane change is needed to get a token:
+An installation can get a token only from an explicitly configured, compatible relay deployment:
 
 - The token route takes any installation credential, desktop or server.
 - `relayAdmits` asks only whether the relay is on, the installation is not
-  blocked, and it is inside `RELAY_ROLLOUT_PERCENT` (100 in `wrangler.jsonc`)
+  blocked, and it is inside `RELAY_ROLLOUT_PERCENT` in the operator’s production config
   or named in `RELAY_ALLOW_INSTALLATIONS`.
 - `RELAY_CAPABLE_MIN_VERSION` gates tunnel provisioning (`409 relay_capable`),
   not tokens. A published server reports a version such as `0.1.152`, which the

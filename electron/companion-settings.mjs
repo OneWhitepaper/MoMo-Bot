@@ -1,3 +1,4 @@
+import { COMPANION_DATA_FOLDER } from "./desktop-brand.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -84,7 +85,7 @@ export const phoneLinkShouldSleep = (state) =>
   state?.enabled === true && !state.error && state.devicesUnreadable !== true && Array.isArray(state.devices) && state.devices.length === 0 && !state.pairing;
 
 export const companionDevicesFile = (env = process.env, home = os.homedir()) =>
-  path.join(env.OMB_COMPANION_DIR ?? path.join(home, ".openmausbot-companion"), "devices.json");
+  path.join(env.OMB_COMPANION_DIR ?? path.join(home, COMPANION_DATA_FOLDER), "devices.json");
 
 /** Paired devices in the companion's own store; null when the file exists but cannot be read. */
 export function readPairedDevices(file = companionDevicesFile()) {

@@ -11,7 +11,7 @@ const SLEEP_CHECK_MS = 60_000;
  *
  * `wake()` starts the sidecar when the launch rule now holds (a way in is on and something is paired).
  */
-export function createPhoneLinkRoutes({ rememberRoute, routeOn, tailscaleRoute = () => null, dismissNotice, state, running, wake, sleep, changed = () => {}, check = checkTailscale, shareChanged = async () => {}, now = Date.now, setTimer = setInterval, log = () => {} }) {
+export function createPhoneLinkRoutes({ rememberRoute, routeOn, routeAvailable = () => true, tailscaleRoute = () => null, dismissNotice, state, running, wake, sleep, changed = () => {}, check = checkTailscale, shareChanged = async () => {}, now = Date.now, setTimer = setInterval, log = () => {} }) {
   let activeSince = 0;
   let timer = null;
 
@@ -65,7 +65,7 @@ export function createPhoneLinkRoutes({ rememberRoute, routeOn, tailscaleRoute =
       return state();
     },
     async setRoute(route, on) {
-      if (!ROUTES.includes(route)) return state();
+      if (!ROUTES.includes(route) || (on === true && !routeAvailable(route))) return state();
       if (route === "tailscale") return setTailscale(on === true);
       await rememberRoute(route, on === true);
       await changed(route, on === true);

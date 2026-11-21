@@ -7,7 +7,7 @@ import { arch, cpus, release, totalmem } from "node:os";
 import { dirname, posix, resolve } from "node:path";
 
 import { defaultDataDir, type DataHomes } from "../data-dir.ts";
-import { PRODUCTION_CLOUD_ORIGIN } from "../devs-report-send.ts";
+import { configuredEndpoint } from "../configured-endpoint.ts";
 import { EXIT, flag, usageError } from "./args.ts";
 import type { VerbContext, VerbOutcome } from "./context.ts";
 
@@ -243,7 +243,7 @@ async function clockCheck(probe: HostProbe): Promise<HostCheck> {
 export async function checkHost(probe: HostProbe, options: HostOptions): Promise<HostCheck[]> {
   if (probe.platform !== "linux") {
     const name = probe.platform === "darwin" ? "macOS" : probe.platform === "win32" ? "Windows" : probe.platform;
-    return [fail("platform", `doctor --host checks a Linux server, and this is ${name}`, "run it on the Linux server that will host OpenMausBot")];
+    return [fail("platform", `doctor --host checks a Linux server, and this is ${name}`, "run it on the Linux server that will host MoMo bot")];
   }
   const [containers, ports, clock, connector] = await Promise.all([containerCheck(probe), portChecks(probe, options), clockCheck(probe), connectorReport(probe)]);
   return [systemCheck(probe), archCheck(probe), containers, userNamespaceCheck(probe, connector), seccompCheck(probe), cgroupCheck(probe),
@@ -290,9 +290,11 @@ export function systemProbe(): HostProbe {
       }
     },
     async clockOffset() {
+      const endpoint = configuredEndpoint(process.env.OMB_CONTROL_PLANE_URL);
+      if (!endpoint) return null;
       try {
         const before = Date.now();
-        const response = await fetch(PRODUCTION_CLOUD_ORIGIN, { method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(5_000) });
+        const response = await fetch(endpoint.origin, { method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(5_000) });
         const after = Date.now();
         const date = Date.parse(response.headers.get("date") ?? "");
         // An HTTP date is whole seconds: the server's clock was somewhere in the second after it.

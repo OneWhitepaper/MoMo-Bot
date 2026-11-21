@@ -35,6 +35,7 @@ import { companionOriginSocket, listenCompanionOrigin } from "./origin.ts";
 import { gzipTunnelReplies } from "./tunnel-gzip.ts";
 import { normalizedPhoneSecretPublicKey } from "./phone-secret-key.ts";
 import { machineNameFromConfig } from "./machine-name.ts";
+import { PRODUCT_NAME } from "./product-brand.ts";
 
 // Only Electron supplies this port; Electron children fail closed until initialized.
 const parentPort = (process as NodeJS.Process & {
@@ -97,7 +98,7 @@ const conflict = (name: string, port: number): string | null => {
 const fixedName = process.env.OMB_COMPANION_NAME?.trim() || "";
 let cachedName = fixedName;
 
-const machineName = (): string => cachedName || "OpenMausBot";
+const machineName = (): string => cachedName || PRODUCT_NAME;
 
 /** True when the name changed. */
 async function refreshMachineName(): Promise<boolean> {

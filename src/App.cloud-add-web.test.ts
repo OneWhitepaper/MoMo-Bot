@@ -2,7 +2,7 @@
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { initialState, type Action, type AppState } from "./state/store";
 
 let state: AppState = { ...initialState, connected: true, hydrated: true };
@@ -30,12 +30,13 @@ function render(cloudAdd: AppState["cloudAdd"], ogb?: unknown): { opened: Return
   return { opened, done: () => { root.unmount(); container.remove(); } };
 }
 
-afterEach(() => { delete (window as { ogb?: unknown }).ogb; vi.unstubAllGlobals(); });
+beforeEach(() => vi.stubEnv("VITE_MOMO_CLOUD_URL", "https://cloud.example.test"));
+afterEach(() => { delete (window as { ogb?: unknown }).ogb; vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 it("in a browser, Try Cloud opens the Cloud website's checkout in the same tap, counts it and leaves nothing waiting", () => {
   const { opened, done } = render({ source: "app_onboarding" });
   try {
-    expect(opened).toHaveBeenCalledExactlyOnceWith("https://cloud.openmausbot.com/pro/buy?src=app_onboarding", "_blank", "noopener,noreferrer");
+    expect(opened).toHaveBeenCalledExactlyOnceWith("https://cloud.example.test/pro/buy?src=app_onboarding", "_blank", "noopener,noreferrer");
     expect(track).toHaveBeenCalledWith("cloud_checkout_opened", { plan: "pro", source: "app_onboarding", via: "web" });
     expect(dispatched).toContainEqual({ type: "closeCloudAdd" });
   } finally { done(); }
@@ -45,8 +46,18 @@ it("on a desktop showing another computer, it goes through main to the browser",
   const openExternal = vi.fn(async () => {});
   const { opened, done } = render({ source: "app_card" }, { remoteClient: { active: true }, cloudAccount: {}, openExternal });
   try {
-    expect(openExternal).toHaveBeenCalledExactlyOnceWith("https://cloud.openmausbot.com/pro/buy?src=app_card");
+    expect(openExternal).toHaveBeenCalledExactlyOnceWith("https://cloud.example.test/pro/buy?src=app_card");
     expect(opened).not.toHaveBeenCalled();
+    expect(dispatched).toContainEqual({ type: "closeCloudAdd" });
+  } finally { done(); }
+});
+
+it("drops a checkout request when no cloud is configured", () => {
+  vi.stubEnv("VITE_MOMO_CLOUD_URL", undefined);
+  const { opened, done } = render({ source: "app_onboarding" });
+  try {
+    expect(opened).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalledWith("cloud_checkout_opened", expect.anything());
     expect(dispatched).toContainEqual({ type: "closeCloudAdd" });
   } finally { done(); }
 });

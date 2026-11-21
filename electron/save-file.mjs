@@ -1,3 +1,4 @@
+import { APP_DATA_FOLDER } from "./desktop-brand.mjs";
 import fs from "node:fs";
 import nativeText from "./native-text.cjs";
 import path from "node:path";
@@ -53,7 +54,7 @@ function isSameFile(left, right) {
 async function resolveSource(rawPath, { home, fsp, platform }) {
   const target = normalizeSourcePath(rawPath);
   const root = await canonicalPath(
-    path.join(home, ".openmausbot"),
+    path.join(home, APP_DATA_FOLDER),
     fsp,
     "Only files created by your bots can be saved",
   );

@@ -8,9 +8,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 const SCRIPT = join(import.meta.dirname, "..", "..", "deploy", "podman", "install.sh");
-const REPO = "ghcr.io/milind-soni/openmausbot";
+const REPO = "ghcr.io/onewhitepaper/momo-bot";
 const DIGEST = `${REPO}@sha256:${"2".repeat(64)}`;
-const STABLE = `${REPO}@sha256:${"5".repeat(64)}`;
+const IMAGE = `${REPO}:v0.1.151`;
 const posix = process.platform !== "win32";
 // The shell the one-line install runs in on Debian and Ubuntu.
 const SHELL = existsSync("/bin/dash") ? "/bin/dash" : "/bin/sh";
@@ -40,9 +40,9 @@ const STUBS: Record<string, string> = {
   *) echo "podman stand-in: $*" >&2; exit 64 ;;
 esac`,
   // Podman's generator: what it was given, and the service it makes of it.
-  quadlet: `cp "$QUADLET_UNIT_DIRS/openmausbot.container" "$FAKE/dryrun.container"; echo "$QUADLET_UNIT_DIRS" >"$FAKE/dryrun.dir"
-[ -z "\${FAKE_QUADLET_FAILS:-}" ] || { echo "quadlet-generator[1]: converting \\"openmausbot.container\\": unsupported key 'HealthOnFailure'"; exit 0; }
-echo "---openmausbot.service---"`,
+  quadlet: `cp "$QUADLET_UNIT_DIRS/momobot.container" "$FAKE/dryrun.container"; echo "$QUADLET_UNIT_DIRS" >"$FAKE/dryrun.dir"
+[ -z "\${FAKE_QUADLET_FAILS:-}" ] || { echo "quadlet-generator[1]: converting \\"momobot.container\\": unsupported key 'HealthOnFailure'"; exit 0; }
+echo "---momobot.service---"`,
   systemctl: `[ "$1" = --user ] || exit 64
 case "$2" in
   show-environment | daemon-reload) ;;
@@ -51,12 +51,9 @@ case "$2" in
   stop) rm -f "$FAKE/active" ;;
   *) exit 64 ;;
 esac`,
-  // The stable channel (FAKE_STABLE_CODE, FAKE_STABLE_BODY), GitHub's newest release, update.sh's file, the health check.
   curl: `out=""; prev=""
 for arg; do [ "$prev" = -o ] && out=$arg; prev=$arg; done
 case "$*" in
-  *channels/stable.json*) [ "\${FAKE_STABLE_CODE:-404}" = 000 ] && { printf 000; exit 7; }; printf '%s' "\${FAKE_STABLE_BODY:-}" >"$out"; printf '%s' "\${FAKE_STABLE_CODE:-404}" ;;
-  *releases/latest*) printf '{"tag_name": "v0.1.151"}' ;;
   */deploy/update.sh*) echo "# the updater; it reads podman.unit" >"$out" ;;
   */api/health*) [ -f "$FAKE/active" ] && echo '{"app":"openmausbot"}' ;;
   *) exit 22 ;;
@@ -78,12 +75,13 @@ function machine(options: { home?: string } = {}) {
     writeFileSync(join(bin, name), `#!/bin/sh\necho "$*" >>"$FAKE/${name}.log"\n${body}\n`);
     chmodSync(join(bin, name), 0o755);
   }
-  const dir = join(home, ".local", "share", "openmausbot");
-  const unitPath = join(home, ".config", "containers", "systemd", "openmausbot.container");
+  const dir = join(home, ".local", "share", "momobot");
+  const unitPath = join(home, ".config", "containers", "systemd", "momobot.container");
   const run = (args: string[] = [], env: Record<string, string> = {}) => {
+    const initialImage = existsSync(join(dir, ".env")) ? "" : IMAGE;
     const result = spawnSync(SHELL, [SCRIPT, ...args], {
       encoding: "utf8", timeout: 30_000,
-      env: { PATH: bin, HOME: home, XDG_RUNTIME_DIR: root, FAKE: fake, OMB_INSTALL_QUADLET: join(bin, "quadlet"), OMB_INSTALL_HEALTH_WAIT_S: "6", ...env },
+      env: { PATH: bin, HOME: home, XDG_RUNTIME_DIR: root, FAKE: fake, OMB_INSTALL_IMAGE: initialImage, OMB_INSTALL_QUADLET: join(bin, "quadlet"), OMB_INSTALL_HEALTH_WAIT_S: "6", ...env },
     });
     return { ...result, out: result.stdout + result.stderr };
   };
@@ -104,11 +102,11 @@ describe.skipIf(!posix)("deploy/podman/install.sh", () => {
     if (existsSync("/bin/dash")) expect(spawnSync("/bin/dash", ["-n", SCRIPT]).status).toBe(0);
   });
 
-  it("installs the newest release while nothing is stable, pinned by digest, with a health check that reads the port when it runs", () => {
+  it("installs the selected release, pinned by digest, with a health check that reads the port when it runs", () => {
     const box = machine();
     const done = box.run(["--port", "8811"]);
     expect(done.status, done.out).toBe(0);
-    expect(done.stdout).toContain("ok    version: v0.1.151, the newest release (no version is stable yet)");
+    expect(done.stdout).toContain(`ok    version: ${IMAGE}, as asked`);
     expect(box.pulled()).toEqual([`${REPO}:v0.1.151`]);
     const unit = box.unit()!;
     expect(unit).toContain(`Image=${DIGEST}\n`);
@@ -117,13 +115,13 @@ describe.skipIf(!posix)("deploy/podman/install.sh", () => {
     expect(unit).not.toContain("8811");
     expect(box.read(join(box.dir, "server.env"))).toContain("OMB_PORT=8811\n");
     expect(unit).toContain(`EnvironmentFile=${box.dir}/server.env\n`);
-    expect(unit).toContain("Environment=OMB_PODMAN_SERVICE=~/.local/share/openmausbot\n");
+    expect(unit).toContain("Environment=OMB_PODMAN_SERVICE=~/.local/share/momobot\n");
     expect(unit).toContain("WARNING: this isolates less than the Docker install.");
     // The generator read a copy in a folder of its own, never the live unit's folder.
     expect(box.read(join(box.fake, "dryrun.container"))).toBe(unit);
     expect(box.read(join(box.fake, "dryrun.dir"))!.trim()).not.toBe(join(box.home, ".config", "containers", "systemd"));
     expect(box.read(join(box.dir, ".env"))).toBe(`OMB_IMAGE=${DIGEST}\n`);
-    expect(done.stdout).toContain("MausBot is running as your user's service (openmausbot), on http://127.0.0.1:8811.");
+    expect(done.stdout).toContain("MoMo bot is running as your user's service (momobot), on http://127.0.0.1:8811.");
     expect(done.stdout).toContain("Warning: it shares this machine's network, which isolates less than the Docker install.");
     expect(done.stdout).toContain("Bots run unboxed, beside the data folder that holds the engines' logins.");
     expect(done.stdout).toContain("Bots reach every service on this machine's loopback: databases, other programs' admin ports.");
@@ -139,35 +137,22 @@ describe.skipIf(!posix)("deploy/podman/install.sh", () => {
     expect(done.stdout).not.toContain("nothing on the open internet can reach it");
   });
 
-  it("takes the stable channel's image, and refuses a channel that fails or names no digest instead of falling back", () => {
-    const stable = machine();
-    const done = stable.run([], { FAKE_STABLE_CODE: "200", FAKE_STABLE_BODY: `{"channel": "stable", "version": "0.1.150", "image": "${STABLE}"}` });
-    expect(done.status, done.out).toBe(0);
-    expect(done.stdout).toContain("ok    version: the stable channel");
-    expect(stable.pulled()).toEqual([STABLE]);
-    expect(stable.unit()).toContain(`Image=${STABLE}\n`);
-
-    for (const [env, words] of [
-      [{ FAKE_STABLE_CODE: "500" }, "The stable channel could not be read (https://raw.githubusercontent.com/milind-soni/OpenMausBot/channels/stable.json answered 500)."],
-      [{ FAKE_STABLE_CODE: "000" }, "answered 000"],
-      [{ FAKE_STABLE_CODE: "200", FAKE_STABLE_BODY: `{"image": "${REPO}:stable"}` }, "names no image this installer accepts"],
-    ] as const) {
-      const box = machine();
-      const refused = box.run([], env);
-      expect(refused.status, refused.out).toBe(1);
-      expect(refused.stderr).toContain(words);
-      expect(box.pulled()).toEqual([]);
-      expect(box.log("curl").some((call) => call.includes("releases/latest"))).toBe(false);
-      expect(box.unit()).toBeNull();
-      expect(existsSync(box.dir)).toBe(false);
-    }
+  it("requires a selected image for a new install without querying a release feed", () => {
+    const box = machine();
+    const refused = box.run([], { OMB_INSTALL_IMAGE: "" });
+    expect(refused.status, refused.out).toBe(1);
+    expect(refused.stderr).toContain("Set OMB_INSTALL_IMAGE to a MoMo bot image");
+    expect(box.pulled()).toEqual([]);
+    expect(box.log("curl")).toEqual([]);
+    expect(box.unit()).toBeNull();
+    expect(existsSync(box.dir)).toBe(false);
   });
 
   it("never keeps a tag it cannot pin by digest, and refuses the latest tag as the Docker installer does", () => {
     const box = machine();
     const unpinned = box.run([], { FAKE_DIGESTS: "" });
     expect(unpinned.status).toBe(1);
-    expect(unpinned.stderr).toContain(`MausBot ${REPO}:v0.1.151 was downloaded, but Podman did not say its digest, so it cannot be pinned`);
+    expect(unpinned.stderr).toContain(`MoMo bot ${REPO}:v0.1.151 was downloaded, but Podman did not say its digest, so it cannot be pinned`);
     expect(box.unit()).toBeNull();
     expect(existsSync(join(box.dir, ".env"))).toBe(false);
 
@@ -177,7 +162,7 @@ describe.skipIf(!posix)("deploy/podman/install.sh", () => {
     expect(other.stderr).toContain("cannot be pinned");
 
     for (const [image, words] of [
-      [`${REPO}:latest`, "OMB_INSTALL_IMAGE names the latest tag, which follows every commit."],
+      [`${REPO}:latest`, "OMB_INSTALL_IMAGE names a moving tag."],
       [REPO, "OMB_INSTALL_IMAGE needs a release tag"],
       [`${REPO}:v1;rm`, "OMB_INSTALL_IMAGE is not an image name."],
     ] as const) {
@@ -249,7 +234,7 @@ describe.skipIf(!posix)("deploy/podman/install.sh", () => {
 
     const other = box.run(["--dir", join(box.root, "srv", "other")]);
     expect(other.status).toBe(1);
-    expect(other.stderr).toContain(`This user's MausBot service already uses ${elsewhere}, and --dir names ${join(box.root, "srv", "other")}. Nothing was changed.`);
+    expect(other.stderr).toContain(`This user's MoMo bot service already uses ${elsewhere}, and --dir names ${join(box.root, "srv", "other")}. Nothing was changed.`);
     expect(existsSync(join(box.root, "srv", "other"))).toBe(false);
     expect(box.unit()).toBe(unit);
 
@@ -309,7 +294,7 @@ describe.skipIf(!posix)("deploy/podman/install.sh", () => {
   it("keeps the image a rollback named by this machine's own name, pinned by the digest it came with, and never pulls that name", () => {
     const box = machine();
     expect(box.run().status).toBe(0);
-    const keep = "openmausbot-before-update:local";
+    const keep = "momobot-before-update:local";
     writeFileSync(join(box.dir, ".env"), `OMB_IMAGE=${keep}\n`);
     writeFileSync(join(box.fake, "local"), `${keep}\n`);
     box.reset();

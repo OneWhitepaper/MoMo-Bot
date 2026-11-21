@@ -142,9 +142,14 @@ describe("CI concurrency", () => {
     expect(delegated).not.toContain("/tasks/${peerThread.threadId}`");
   });
 
-  it("makes a release wait for its commit's CI gate before any draft", () => {
+  it("builds release artifacts on demand after the selected commit passes CI", () => {
     const release = parse(readFileSync(new URL("../.github/workflows/release.yml", import.meta.url), "utf8"));
-    expect(release.jobs.assemble.needs).toContain("ci");
+    expect(Object.keys(release.on)).toEqual(["workflow_dispatch"]);
+    expect(release.permissions).toEqual({ contents: "read" });
+    expect(Object.keys(release.jobs).sort()).toEqual(["ci", "linux", "mac", "prepare", "windows"]);
+    for (const platform of ["mac", "windows", "linux"]) {
+      expect(release.jobs[platform].needs).toEqual(["prepare", "ci"]);
+    }
     expect(release.jobs.ci.needs).toBe("prepare");
     expect(release.jobs.ci.permissions).toEqual({ actions: "write", contents: "write" });
     const wait = release.jobs.ci.steps.find((step: { run?: string }) => step.run === "node scripts/release-ci.mjs");

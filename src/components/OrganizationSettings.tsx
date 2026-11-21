@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { ManagedDesktopState, ManagedMessageCode } from "../../electron/managed-desktop.mjs";
+import { configuredOrganizationOrigin } from "@/lib/app-links";
 import { activeLocale, t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { Card, LearnMore, SETTINGS_INPUT, SettingRow, SettingsField, SettingsFoldRow, SettingsRows } from "./SettingsPrimitives";
 import { CompanyModels } from "./CompanyModels";
 
 const providerNames: Record<string, string> = { anthropic: "Anthropic", openai: "OpenAI", openrouter: "OpenRouter" };
-const DEFAULT_PORTAL_ORIGIN = "https://admin.openmausbot.com";
 const STATUS_TEXT: Record<ManagedMessageCode, LocaleKey> = {
   clearFailed: "organization.status.clearFailed",
   disconnected: "organization.status.disconnected",
@@ -41,6 +41,7 @@ export function OrganizationSettings({ simple = false }: { simple?: boolean } = 
   const [error, setError] = useState("");
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [more, setMore] = useState(false);
+  const portalOrigin = configuredOrganizationOrigin();
   const [custom, setCustom] = useState(false);
   const pending = useRef(false);
   const generation = useRef(0);
@@ -105,7 +106,19 @@ export function OrganizationSettings({ simple = false }: { simple?: boolean } = 
     ? new Intl.DateTimeFormat(activeLocale(), { dateStyle: "medium", timeStyle: "short" }).format(date) : null;
   if (connection?.status === "signed-out" && simple) return <div data-settings-rows="" hidden />;
   if (connection?.status === "signed-out") {
-    // One row: sign in with a work email; the long notes behind Learn more, the custom address behind a fold.
+    const addressForm = (
+      <form className="flex flex-col gap-2 px-4 py-3" onSubmit={(event) => {
+        event.preventDefault();
+        if (address.trim()) void perform(() => bridge.begin({ portalOrigin: address.trim() }));
+      }}>
+        <SettingsField label={t("organization.address")} hint={t("organization.advancedHelp")}>
+          <input type="url" required value={address} disabled={busy} onChange={(event) => setAddress(event.target.value)}
+            placeholder="https://" autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck={false} maxLength={2048}
+            className={SETTINGS_INPUT} />
+        </SettingsField>
+        <button type="submit" disabled={busy || !address.trim()} className="ui-button self-end">{t("organization.customSignIn")}</button>
+      </form>
+    );
     return <SettingsRows>
       <SettingRow title={t("organization.signIn")} subtitle={<>{t("organization.signInShort")}{" "}<LearnMore onClick={() => setMore((open) => !open)} /></>}
         message={<>
@@ -114,23 +127,13 @@ export function OrganizationSettings({ simple = false }: { simple?: boolean } = 
           {licenseExpired && <span role="alert" className="block text-ink">{t("organization.licenseExpired")}</span>}
           {error && <span role="alert" className="block text-danger">{error}</span>}
         </>}>
-        <button type="button" disabled={busy} className="ui-button" data-organization-sign-in="" onClick={() => void perform(() => bridge.begin({ portalOrigin: DEFAULT_PORTAL_ORIGIN }))}>
+        {portalOrigin && <button type="button" disabled={busy} className="ui-button" data-organization-sign-in="" onClick={() => void perform(() => bridge.begin({ portalOrigin }))}>
           {busy ? t("organization.working") : t("organization.useWorkSignIn")}
-        </button>
+        </button>}
       </SettingRow>
-      <SettingsFoldRow id="organization-address" title={t("organization.customTitle")} open={custom} onToggle={() => setCustom((open) => !open)}>
-        <form className="flex flex-col gap-2 px-4 py-3" onSubmit={(event) => {
-          event.preventDefault();
-          if (address.trim()) void perform(() => bridge.begin({ portalOrigin: address.trim() }));
-        }}>
-          <SettingsField label={t("organization.address")} hint={t("organization.advancedHelp")}>
-            <input type="url" required value={address} disabled={busy} onChange={(event) => setAddress(event.target.value)}
-              placeholder={DEFAULT_PORTAL_ORIGIN} autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck={false} maxLength={2048}
-              className={SETTINGS_INPUT} />
-          </SettingsField>
-          <button type="submit" disabled={busy || !address.trim()} className="ui-button self-end">{t("organization.customSignIn")}</button>
-        </form>
-      </SettingsFoldRow>
+      {portalOrigin ? <SettingsFoldRow id="organization-address" title={t("organization.customTitle")} open={custom} onToggle={() => setCustom((open) => !open)}>
+        {addressForm}
+      </SettingsFoldRow> : addressForm}
     </SettingsRows>;
   }
   return <>

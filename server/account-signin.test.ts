@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { allowedScopes, createEmailSignIn, parseAllowList, signInEnabled } from "./account-signin.ts";
 import { startControlPlaneStub } from "./testing/control-plane-stub.ts";
@@ -56,10 +56,19 @@ describe("the exchange with the control plane", () => {
     }
   });
 
-  it("is off with an empty allow-list and says so when the sign-in service is down", async () => {
+  it("is off without an allow-list or a configured sign-in service", async () => {
     const off = createEmailSignIn({ allow: () => ({ admins: [], members: [] }) });
     expect(off.enabled()).toBe(false);
+    const fetchImpl = vi.fn<typeof fetch>();
+    const unset = createEmailSignIn({ allow: { admins: ["a@b.test"], members: [] }, env: {}, fetchImpl });
+    expect(unset.enabled()).toBe(false);
+    expect(await unset.start("a@b.test")).toMatchObject({ ok: false, status: 502 });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("reports when the configured sign-in service is down", async () => {
     const down = createEmailSignIn({ allow: { admins: ["a@b.test"], members: [] }, env: { ...process.env, OMB_CONTROL_PLANE_URL: "http://127.0.0.1:9" } });
+    expect(down.enabled()).toBe(true);
     expect(await down.start("a@b.test")).toMatchObject({ ok: false, status: 502 });
   });
 });

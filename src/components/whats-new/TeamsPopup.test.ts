@@ -28,16 +28,17 @@ const buttons = (popup: HTMLElement) => [...popup.querySelectorAll("button")].ma
 
 beforeEach(() => {
   setLocale("en"); avatars.length = 0; opened.length = 0; vi.clearAllMocks();
+  vi.stubEnv("VITE_MOMO_CLOUD_URL", "https://cloud.example");
   delete document.documentElement.dataset.reducedMotion;
   host = document.createElement("div"); document.body.append(host);
 });
-afterEach(async () => { await act(async () => root?.unmount()); root = null; host.remove(); });
+afterEach(async () => { await act(async () => root?.unmount()); root = null; host.remove(); vi.unstubAllEnvs(); });
 
 describe("the Teams popup", () => {
   it("each audience has its own buttons: invite for a team's admins, Got it for its members, Start a team and Not now for everyone else", async () => {
-    let popup = await show({ kind: "start", inApp: true, url: "https://cloud.example/pro/buy" });
+    let popup = await show({ kind: "start", inApp: true });
     expect(popup.getAttribute("role")).toBe("dialog");
-    expect(popup.textContent).toContain("MausBot is better with your team");
+    expect(popup.textContent).toContain("MoMo bot is better with your team");
     expect(popup.textContent).toContain("$40 a month for 2 people, $20 for each extra person.");
     expect(buttons(popup)).toEqual(["Start a team", "See Team plans", "Not now", "Close"]);
     expect(document.activeElement?.textContent, "focus starts at its main button").toBe("Start a team");
@@ -59,7 +60,7 @@ describe("the Teams popup", () => {
       const popup = await show(action);
       const link = [...popup.querySelectorAll("button")].find(button => button.textContent === "See Team plans");
       await act(async () => { link!.click(); });
-      expect(opened.at(-1), action.kind).toBe("https://www.openmausbot.com/pricing#teams");
+      expect(opened.at(-1), action.kind).toBe("https://cloud.example/cloud");
       expect(onStep, action.kind).toHaveBeenLastCalledWith("see_team_plans");
       await act(async () => root?.unmount()); root = null;
     }

@@ -1,9 +1,10 @@
 import type { HelperFollowupField } from "./helper-followup.ts";
 import type { MausColor } from "./wire.ts";
 
-/** MausBot: every person's built-in helper. A new install's first bot (its Chief of Staff too); an existing place or
- * person without one is given one once. It can be renamed and recoloured, hidden from the sidebar, never deleted. */
-export const DEFAULT_BOT_NAME = "MausBot";
+import { PRODUCT_NAME } from "./product-brand.ts";
+
+/** Each person's built-in helper, the first bot in a new installation. It can be renamed, recoloured and hidden, but not deleted. */
+export const DEFAULT_BOT_NAME = PRODUCT_NAME;
 export const DEFAULT_BOT_COLOR: MausColor = "chrome";
 
 export interface DefaultBotMark {

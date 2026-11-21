@@ -1,15 +1,36 @@
-export const APP_NAME = "OpenMausBot";
-export const APP_REPOSITORY = "https://github.com/milind-soni/OpenMausBot";
+import { PRODUCT_REPOSITORY_URL, PRODUCT_URL_SCHEME } from "../../shared/product-brand";
+
+export const APP_URL_SCHEME = PRODUCT_URL_SCHEME;
+export const UPSTREAM_NAME = "OpenMausBot";
+export const APP_REPOSITORY = PRODUCT_REPOSITORY_URL;
 export const DOCS_URL = `${APP_REPOSITORY}/tree/main/docs`;
+export const DOCS_SOURCE = `${APP_REPOSITORY}/blob/main/docs`;
 export const HELP_CENTER_URL = DOCS_URL;
-export const APPROVAL_LEVELS_URL = `${APP_REPOSITORY}/blob/main/docs/approval-levels.md`;
-export const PASSKEY_HELP_URL = "https://docs.openmausbot.com/docs/troubleshooting/google-sign-in-cloud-browser";
-export const FEEDBACK_URL = "https://discord.gg/9Wb8MEpXRs";
+export const APPROVAL_LEVELS_URL = `${DOCS_SOURCE}/approval-levels.md`;
+export const PASSKEY_HELP_URL = `${APP_REPOSITORY}/blob/main/apps/docs/content/docs/troubleshooting/google-sign-in-cloud-browser.mdx`;
+export const FEEDBACK_URL = `${APP_REPOSITORY}/issues`;
 export const RELEASES_URL = `${APP_REPOSITORY}/releases`;
-export const PRICING_URL = "https://www.openmausbot.com/pricing";
-/** The website's Team plans: `#teams` opens the pricing page on its Team tab. */
-export const TEAM_PLANS_URL = `${PRICING_URL}#teams`;
-export const CLOUD_PLAN_URL = "https://cloud.openmausbot.com/cloud";
+export function configuredCloudPage(staging = false): string | null {
+  const value = (staging ? import.meta.env.VITE_MOMO_CLOUD_STAGING_URL : import.meta.env.VITE_MOMO_CLOUD_URL)?.trim();
+  if (!value) return null;
+  try {
+    const origin = new URL(value);
+    return origin.protocol === "https:" && !origin.username && !origin.password ? new URL("/cloud", origin).href : null;
+  } catch {
+    return null;
+  }
+}
+export function configuredOrganizationOrigin(): string | null {
+  const value = import.meta.env.VITE_MOMO_ORGANIZATION_URL?.trim();
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password && url.pathname === "/" && !url.search && !url.hash ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The Admin's team People page (openmaus-cloud docs/team-seats.md): people, seats and roles are managed there, never in
  * the app. `invite` opens its invite box (Owner and Admins); `seats` its seat stepper (the Owner, whose card pays). */
 export const TEAM_PEOPLE_PAGES = { invite: "people?do=invite", seats: "people?do=seats" } as const;

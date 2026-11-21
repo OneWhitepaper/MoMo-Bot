@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { connectAiStep } from "./connect-ai-events";
 import { loadWaitingFor } from "./app-load";
@@ -32,11 +32,13 @@ const HOSTILE = "Claude isn't signed in for ada@example.com with sk-ant-api03-SE
 const sent = (event: string) => ph.captured.filter((entry) => entry.event === event).map((entry) => entry.props);
 
 beforeEach(async () => {
+  vi.stubEnv("VITE_MOMO_ANALYTICS_TOKEN", "phc_test");
   store.clear();
   ph.captured = [];
   const { initAnalytics } = await import("./analytics");
   await initAnalytics();
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe("Connect an AI steps", () => {
   it("names the engine by its kind and the failure by a word from its list, never the provider's text", () => {

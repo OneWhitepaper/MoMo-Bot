@@ -120,11 +120,11 @@ async function pairingCode(scopes?: string[]): Promise<{ code: string; credentia
 beforeAll(async () => {
   home = mkdtempSync(join(tmpdir(), "omb-remote-test-"));
   const staticDir = join(home, "static");
-  mkdirSync(join(home, ".openmausbot"), { recursive: true });
+  mkdirSync(join(home, ".momobot"), { recursive: true });
   mkdirSync(join(staticDir, "assets"), { recursive: true });
   writeFileSync(join(staticDir, "index.html"), "<!doctype html><title>Served UI</title>");
   // Avoid probing whatever agent CLIs the test machine has installed.
-  writeFileSync(join(home, ".openmausbot", "config.json"), JSON.stringify({
+  writeFileSync(join(home, ".momobot", "config.json"), JSON.stringify({
     instances: { fixture: { driver: "remote-session-test-shadow" } },
     profile: { name: "Security fixture", email: "private@example.invalid" },
     vps: { sshAlias: "fixture-private-host" },
@@ -390,8 +390,7 @@ describe("pairing", () => {
     const opened = await pairingCode(["client"]);
     expect(opened.inviteUrl).not.toBeNull();
     const invite = new URL(opened.inviteUrl!);
-    // Android's PairingInvite.parse accepts only this exact scheme and host (android/core Connection.kt).
-    expect(invite.protocol).toBe("openmausbot:");
+    expect(invite.protocol).toBe("momobot:");
     expect(invite.host).toBe("pair");
     expect(invite.searchParams.get("address")).toBe(PUBLIC_URL);
     expect(invite.searchParams.get("token")).toBe(opened.credential);

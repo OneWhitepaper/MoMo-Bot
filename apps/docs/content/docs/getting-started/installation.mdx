@@ -1,63 +1,41 @@
 ---
 title: Installation
-description: Install MausBot on macOS, Windows, or Ubuntu.
+description: Run MoMo bot on macOS, Windows, or Linux.
 icon: Download
 ---
 
-## Download a released build
+Check [MoMo bot Releases](https://github.com/OneWhitepaper/MoMo-Bot/releases) for a build for your system. If there is no matching package, run the app from source.
 
-Choose your computer below. Each link always downloads the latest published build.
+## Run from source
 
-| Platform | Recommended package | Notes |
-|---|---|---|
-| macOS Apple silicon | [Download `.dmg`](https://github.com/milind-soni/OpenMausBot/releases/latest/download/OpenMausBot.dmg) | Signed and notarized. Drag to Applications. |
-| macOS Intel | [Download `.dmg`](https://github.com/milind-soni/OpenMausBot/releases/latest/download/OpenMausBot-intel.dmg) | Signed and notarized. |
-| Windows x64 | [Download installer](https://github.com/milind-soni/OpenMausBot/releases/latest/download/OpenMausBot-setup.exe) | Per-user installer; Windows signing is not yet available. |
-| Ubuntu 24.04 x64 | [Download `.deb`](https://github.com/milind-soni/OpenMausBot/releases/latest/download/OpenMausBot-amd64.deb) · [AppImage](https://github.com/milind-soni/OpenMausBot/releases/latest/download/OpenMausBot.AppImage) | The `.deb` is recommended; the AppImage is portable. |
-| Fedora x64 | [Download `.rpm`](https://github.com/milind-soni/OpenMausBot/releases/latest/download/OpenMausBot-x86_64.rpm) | Community-supported; install with `sudo dnf install ./OpenMausBot-x86_64.rpm`. |
-
-<Callout type="warn" title="Windows SmartScreen">
-  The Windows installer is not code-signed yet. Windows may show “Unknown publisher.” Verify that you downloaded it from the official OpenMausBot releases repository before choosing **More info → Run anyway**.
-</Callout>
-
-<Callout title="Windows install folder">
-  By default the Windows app installs to `%LOCALAPPDATA%\Programs\OpenMausBot`, and every update goes back to the folder the installer recorded. Keep it where the installer put it: a copy moved by hand (for example from C: to D:) is left behind, and the next update lands in the recorded folder again.
-</Callout>
-
-## Install an agent CLI
-
-MausBot needs at least one supported agent engine installed and signed in. Claude and Codex are the most common starting points.
-
-1. Install the CLI from its official provider.
-2. Run it once in a terminal and complete sign-in.
-3. Restart MausBot.
-4. Open the model picker. Available engines appear normally; unavailable engines explain what is missing.
-
-See [Agent engines](../providers/index.mdx) for the complete list and explicit path overrides.
-
-## Using MausBot at work
-
-If your company uses OpenMaus Admin, you can sign in with your organization to use the AI models it provides, alongside your own. It is optional. See [Use MausBot at work](./organisation.mdx).
-
-## Build from source
-
-Requirements: Node.js 24 or newer, pnpm 10.33.0, and at least one authenticated agent CLI.
+Install Node.js 24 or newer and pnpm 10.33.0, then clone the project:
 
 ```bash
-git clone https://github.com/milind-soni/OpenMausBot.git
-cd OpenMausBot
-corepack enable
+git clone https://github.com/OneWhitepaper/MoMo-Bot.git
+cd MoMo-Bot
 pnpm install --frozen-lockfile
 ```
 
-Run the harness, web UI, and Electron shell in separate terminals:
+Run these three commands in separate terminals, from the checkout:
 
 ```bash
 pnpm dev:server
-pnpm dev
+pnpm dev --strictPort
 pnpm dev:desktop
 ```
 
+The server listens on `127.0.0.1:8799` and Vite on `127.0.0.1:5199`.
+
+## Connect your AI
+
+Install a supported agent CLI from its provider, sign in, and restart MoMo bot. You can also set an API key for a supported provider. [Agent engines](/docs/providers) lists the options.
+
+If your organization provides a compatible sign-in portal, [connect to it](/docs/getting-started/organisation) to use the models it approves.
+
+## Build a desktop package
+
+Use `pnpm package:mac`, `pnpm package:win`, or `pnpm package:linux` for your platform. The build writes artifacts to `release/`. Distributing signed packages requires signing credentials for the publisher.
+
 ## Where data lives
 
-MausBot stores its application data under `~/.openmausbot`. Workspaces you add are in `~/.openmausbot-profiles/`; once this computer's bots have moved to My Cloud, This Mac's (or This PC's) is there too, as `default`, and `~/.openmausbot` keeps the copy from before the move. On a server, see [Data and backups](/docs/self-hosting/data-and-backups) for the Docker and installer folders. Electron window and browser data use the normal per-platform application data directory.
+Workspaces and settings start in `~/.momobot`. The desktop puts additional workspaces in `~/.momobot-profiles`; phone pairing uses `~/.momobot-companion`. Existing OpenMausBot data stays in the original application's data directory. See [Data and backups](/docs/self-hosting/data-and-backups) before moving data.

@@ -1,16 +1,13 @@
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
-import { unstable_readConfig } from "wrangler";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const TEST_AUTH_SECRET = "test-only-better-auth-secret-with-more-than-32-characters";
 const TEST_CLOUDFLARE_TOKEN = "test-only-cloudflare-api-token-with-no-real-access";
-const wranglerPath = fileURLToPath(new URL("./wrangler.jsonc", import.meta.url));
-// The production account list, for the test that checks it parses.
-const productionAccounts = unstable_readConfig({ config: wranglerPath }).vars.CLOUDFLARE_ENDPOINT_ACCOUNTS ?? [];
-process.env.BETTER_AUTH_SECRET ??= TEST_AUTH_SECRET;
-process.env.CLOUDFLARE_API_TOKEN ??= TEST_CLOUDFLARE_TOKEN;
+const wranglerPath = fileURLToPath(new URL("./wrangler.local.jsonc", import.meta.url));
+process.env.BETTER_AUTH_SECRET = TEST_AUTH_SECRET;
+process.env.CLOUDFLARE_API_TOKEN = TEST_CLOUDFLARE_TOKEN;
 
 export default defineConfig({
   plugins: [
@@ -20,20 +17,10 @@ export default defineConfig({
         bindings: {
           BETTER_AUTH_SECRET: TEST_AUTH_SECRET,
           CLOUDFLARE_API_TOKEN: TEST_CLOUDFLARE_TOKEN,
-          // The suite starts from the primary account alone; the account
-          // tests add accounts themselves.
-          CLOUDFLARE_ENDPOINT_ACCOUNTS: "",
-          TEST_PRODUCTION_ENDPOINT_ACCOUNTS: JSON.stringify(productionAccounts),
-          ALLOWED_ORIGINS: "https://app.openmausbot.test",
-          // Production starts in observe (wrangler.jsonc); the suite exercises reclaiming.
+          BETTER_AUTH_URL: "https://auth.momobot.test",
+          OMB_DNS_RECORD_LIMIT: "3500",
           OMB_TUNNEL_RECLAIM: "on",
-          // The tunnel release switches as the code defaults them (off), whatever wrangler.jsonc has live; the
-          // release and cutoff tests turn each one on themselves.
-          RELAY_TUNNEL_RELEASE_PERCENT: "0",
-          RELAY_TUNNEL_RELEASE_DAYS: "3",
-          TUNNEL_LEGACY_PHONE_CUTOFF_PERCENT: "0",
-          TUNNEL_MIN_APP_VERSION: "",
-          TUNNEL_REASON_MIN_VERSION: "",
+          OMB_CLEANUP_SWEEP_LIMIT: "20",
           TEST_MIGRATIONS: await readD1Migrations(`${root}migrations`),
         },
         // An empty database for migration tests that need data written by an

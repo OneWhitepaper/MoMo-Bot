@@ -11,17 +11,22 @@
 # image is installed instead of the published release.
 #   OUT=<evidence folder> bash deploy/e2e/run.sh
 set -euo pipefail
+if [ "${CI:-}" != true ]; then
+  echo "This fixture installs into /opt/momobot; run it only on a disposable CI host." >&2
+  exit 2
+fi
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 OUT=${OUT:-$(mktemp -d)}
 mkdir -p "$OUT"
 DOMAIN=installer-e2e.internal
-DIR=/opt/openmausbot
+DIR=/opt/momobot
 SETTINGS=(OMB_INSTALL_SKIP_DNS=1 OMB_INSTALL_HTTPS_WAIT_S=20 "OMB_INSTALL_SOURCE=file://$ROOT")
 # Without a version asked for: what a person's later run is, which must keep the version update.sh pinned.
 # Under umask 000, as a root shell may have it: what the installer makes must not take its modes from there.
 UMASK_000=(sh -c "umask 000; exec sh \"\$0\" \"\$@\"")
 PLAIN_INSTALL=(sudo env "${SETTINGS[@]}" "${UMASK_000[@]}" "$ROOT/deploy/install.sh")
-if [ -n "${OMB_INSTALL_IMAGE:-}" ]; then SETTINGS+=("OMB_INSTALL_IMAGE=$OMB_INSTALL_IMAGE"); fi
+: "${OMB_INSTALL_IMAGE:?Start a fixture image registry and supply its image.}"
+SETTINGS+=("OMB_INSTALL_IMAGE=$OMB_INSTALL_IMAGE")
 INSTALL=(sudo env "${SETTINGS[@]}" "${UMASK_000[@]}" "$ROOT/deploy/install.sh")
 box_check() { (cd "$DIR" && sudo docker compose exec -T omb node dist-server/bot-box/box-check.js --public=none "$@"); }
 
@@ -73,37 +78,18 @@ install_until_https() { # evidence-file [the install command, when not the usual
   set -- "$file"
   cat "$1"
   [ "$status" = 1 ] || fail "the install exited $status, not 1"
-  contains "$1" "MausBot is running, but https://$DOMAIN did not answer within 20 seconds" "the install did not end at the certificate"
+  contains "$1" "MoMo bot is running, but https://$DOMAIN did not answer within 20 seconds" "the install did not end at the certificate"
   [ "$(sudo docker inspect --format '{{.State.Health.Status}}' "$(cd "$DIR" && sudo docker compose ps -q omb)")" = healthy ] || fail "the server is not healthy"
   (cd "$DIR" && sudo docker compose exec -T omb curl -sf http://127.0.0.1:8799/api/health) | grep -q openmausbot || fail "the server does not answer inside its container"
   curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -H "Host: $DOMAIN" http://127.0.0.1/ | grep -qx 308 || fail "Caddy does not redirect port 80 to HTTPS"
   through_caddy "the install"
 }
 
-# The folders above the install, as the Update server button checks them (update-runner.sh): a fresh Ubuntu server has
-# / and /opt root's and closed to others. A CI image may not; it is set as a server has it, never the check weakened.
-prepare_like_a_server() {
-  stat -c '%U:%G %a %n' / /opt /srv 2>/dev/null || true
-  getfacl -p / /opt /srv 2>/dev/null || true
-  for folder in / /opt /srv; do
-    [ -d "$folder" ] || continue
-    # A default ACL hands new folders under it modes no umask decides; a server has none.
-    if getfacl -p "$folder" 2>/dev/null | grep -q '^default:'; then
-      echo "CI host: $folder has a default ACL; removed, as on a server"
-      sudo setfacl -b "$folder"
-    fi
-    if [ "$(stat -c %u "$folder")" != 0 ] || [ $((8#$(stat -c %a "$folder") & 8#022)) != 0 ]; then
-      echo "CI host: $folder is $(stat -c '%U:%G %a' "$folder"); made root's and closed to others, as on a server"
-      sudo chown root:root "$folder" && sudo chmod go-w "$folder"
-    fi
-  done
-}
-prepare_like_a_server
 
 step "the checks alone, with a name that points nowhere: one thing to fix, nothing changed"
 status=0
 containers_before=$(sudo docker ps -aq | sort)
-as_root sh "$ROOT/deploy/install.sh" --check --domain "$DOMAIN" >"$OUT/check.txt" 2>&1 || status=$?
+as_root env "OMB_INSTALL_IMAGE=$OMB_INSTALL_IMAGE" "OMB_INSTALL_SOURCE=file://$ROOT" sh "$ROOT/deploy/install.sh" --check --domain "$DOMAIN" >"$OUT/check.txt" 2>&1 || status=$?
 cat "$OUT/check.txt"
 [ "$status" = 1 ] || fail "--check exited $status, not 1"
 [ "$(grep -c '^  FIX   ' "$OUT/check.txt")" = 1 ] || fail "--check found more than the DNS record to fix"
@@ -116,15 +102,12 @@ done
 
 step "the checks pass once the DNS record is set aside"
 "${INSTALL[@]}" --check --domain "$DOMAIN" | tee "$OUT/check-ready.txt"
-contains "$OUT/check-ready.txt" "This server is ready for MausBot. Nothing was changed." "--check did not pass"
+contains "$OUT/check-ready.txt" "This server is ready for MoMo bot. Nothing was changed." "--check did not pass"
 
 step "install: the server is healthy behind Caddy, on a pinned release, with its data in one folder"
 install_until_https "$OUT/install.txt"
 image=$(sudo sed -n 's/^OMB_IMAGE=//p' "$DIR/.env")
-case "$image" in
-  ghcr.io/milind-soni/openmausbot:stable | ghcr.io/milind-soni/openmausbot:v[0-9]*) ;;
-  *) [ "$image" = "${OMB_INSTALL_IMAGE:-}" ] || fail "the install pinned $image" ;;
-esac
+[ "$image" = "$OMB_INSTALL_IMAGE" ] || fail "the install selected $image"
 [ "$(sudo stat -c %a "$DIR/.env")" = 600 ] || fail ".env is readable by others"
 [ "$(sudo stat -c %a "$DIR/data")" = 700 ] || fail "the data folder is open to others"
 [ "$(sudo stat -c %u "$DIR/data")" = "$(sudo docker run --rm --entrypoint id "$image" -u)" ] || fail "the data folder is not the server's own"
@@ -170,15 +153,10 @@ else
   echo "this checkout has no deploy/update.sh; nothing to place"
 fi
 
-step "the Update server button: systemd watches for the server's request, which only the server's own folder takes"
-if [ -f "$ROOT/deploy/update-runner.sh" ]; then
-  systemctl is-enabled --quiet openmausbot-update.path || fail "the button's path unit is not enabled"
-  sudo grep -qx "layout=installer" /var/lib/openmausbot-update/status/runner || fail "the runner did not say it is there"
-  in_server() { (cd "$DIR" && sudo docker compose exec -T omb sh -c "$1"); }
-  in_server 'test -w /run/omb-update/request' || fail "the server cannot leave a request"
-  if in_server 'echo x > /run/omb-update/status/last' 2>/dev/null; then fail "the server can write the runner's status"; fi
-  echo "the request folder is the server's, the status folder is read-only to it"
-fi
+step "the installer did not enable app-triggered updates"
+[ ! -e "$DIR/update-runner.sh" ] || fail "the installer placed an update runner"
+if systemctl is-enabled --quiet momobot-update.path; then fail "an update path unit was enabled"; fi
+(cd "$DIR" && sudo docker compose exec -T omb test ! -e /run/omb-update) || fail "the update request is mounted"
 
 step "HTTPS comes back by itself whenever the server restarts without Caddy"
 # Caddy used to share the server's network, and stayed in the old, dead one after each of these, with 443 refused.
@@ -195,7 +173,7 @@ healthy_again && through_caddy "kill -9 of the server process"
 step "the documented backup and restore, each with the whole project stopped and started"
 echo before-backup | sudo tee "$DIR/data/e2e-backup" >/dev/null
 # docs/deploy-vps.md, "Back up", with the installer: exactly as written there.
-(cd /opt/openmausbot && sudo docker compose stop && sudo sh -c 'set -e; install -d -m 700 backups; f="backups/backup-$(date -u +%Y%m%dT%H%M%SZ).tgz"; (umask 077; tar --warning=no-file-ignored -czf "$f" data .env); chmod 600 "$f"'; sudo docker compose start) >"$OUT/backup.txt" 2>&1
+(cd /opt/momobot && sudo docker compose stop && sudo sh -c 'set -e; install -d -m 700 backups; f="backups/backup-$(date -u +%Y%m%dT%H%M%SZ).tgz"; (umask 077; tar --warning=no-file-ignored -czf "$f" data .env); chmod 600 "$f"'; sudo docker compose start) >"$OUT/backup.txt" 2>&1
 archive=$(cd "$DIR" && sudo sh -c 'ls backups/backup-*.tgz' | head -n 1)
 [ -n "$archive" ] || fail "the backup made no archive: $(cat "$OUT/backup.txt")"
 grep -q "socket ignored" "$OUT/backup.txt" && fail "tar listed sockets: $(cat "$OUT/backup.txt")"
@@ -203,14 +181,14 @@ grep -q "socket ignored" "$OUT/backup.txt" && fail "tar listed sockets: $(cat "$
 [ "$(sudo stat -c %a "$DIR/backups")" = 700 ] || fail "the backups folder is open to others"
 healthy_again && through_caddy "the backup"
 echo after-backup | sudo tee "$DIR/data/e2e-backup" >/dev/null
-(cd /opt/openmausbot && sudo docker compose stop && sudo sh -c "set -e; tar -tzf $archive data/ >/dev/null; rm -rf data.before-restore; mv data data.before-restore; tar -xzpf $archive data"; sudo docker compose start) >"$OUT/restore.txt" 2>&1
+(cd /opt/momobot && sudo docker compose stop && sudo sh -c "set -e; tar -tzf $archive data/ >/dev/null; rm -rf data.before-restore; mv data data.before-restore; tar -xzpf $archive data"; sudo docker compose start) >"$OUT/restore.txt" 2>&1
 [ "$(sudo cat "$DIR/data/e2e-backup")" = before-backup ] || fail "the restore did not put the data back: $(cat "$OUT/restore.txt")"
 [ "$(sudo stat -c '%u:%a' "$DIR/data")" = "$(sudo stat -c '%u:%a' "$DIR/data.before-restore")" ] || fail "the restore changed the data folder's owner or mode"
 sudo rm -rf "$DIR/data.before-restore" "$DIR/$archive"
 healthy_again && through_caddy "the restore"
 
 step "the first admin's sign-in link, made the way the installer says"
-(cd "$DIR" && sudo docker compose exec -T omb openmausbot pair --label "First admin") >"$OUT/pair.txt" 2>&1 || fail "pair failed: $(cat "$OUT/pair.txt")"
+(cd "$DIR" && sudo docker compose exec -T omb momobot pair --label "First admin") >"$OUT/pair.txt" 2>&1 || fail "pair failed: $(cat "$OUT/pair.txt")"
 grep -q "https://$DOMAIN/pair#code=" "$OUT/pair.txt" || fail "pair printed no link for $DOMAIN"
 rm -f "$OUT/pair.txt"
 
@@ -228,12 +206,12 @@ pin=$(sudo docker image inspect -f '{{index .RepoDigests 0}}' "$image")
 case "$pin" in *@sha256:*) ;; *) fail "the installed image has no digest: $pin" ;; esac
 sudo sed -i "s|^OMB_IMAGE=.*|OMB_IMAGE=$pin|" "$DIR/.env"
 install_until_https "$OUT/pinned.txt" "${PLAIN_INSTALL[@]}"
-contains "$OUT/pinned.txt" "version: the one update.sh pinned here" "the installer did not keep the pin"
+contains "$OUT/pinned.txt" "version: the one already installed" "the installer did not keep the pin"
 sudo grep -qx "OMB_IMAGE=$pin" "$DIR/.env" || fail "the installer overwrote the pinned version"
 
 step "an install from before, with Caddy in the server's network, moves to the new layout when the installer runs"
 sudo tee "$DIR/compose.yaml" >/dev/null <<'OLD'
-name: openmausbot
+name: momobot-server
 services:
   omb:
     image: ${OMB_IMAGE:?run the installer again}
@@ -285,13 +263,13 @@ sudo grep -q network_mode "$DIR/compose.yaml" && fail "the run left Caddy in the
 step "uninstall: the server stops, the data stays"
 sudo sh "$ROOT/deploy/install.sh" --uninstall | tee "$OUT/uninstall.txt"
 contains "$OUT/uninstall.txt" "Your data is kept in $DIR/data" "uninstall did not say where the data is"
-[ -z "$(sudo docker ps -aq --filter label=com.docker.compose.project=openmausbot)" ] || fail "uninstall left a container"
+[ -z "$(sudo docker ps -aq --filter label=com.docker.compose.project=momobot-server)" ] || fail "uninstall left a container"
 [ "$(sudo cat "$DIR/data/e2e-marker")" = kept ] || fail "uninstall touched the data"
 
 step "install again on the kept data"
 "${INSTALL[@]}" >"$OUT/reinstall.txt" 2>&1 || true
 cat "$OUT/reinstall.txt"
-contains "$OUT/reinstall.txt" "MausBot is running, but https://$DOMAIN did not answer" "the reinstall did not come back up"
+contains "$OUT/reinstall.txt" "MoMo bot is running, but https://$DOMAIN did not answer" "the reinstall did not come back up"
 [ "$(sudo cat "$DIR/data/e2e-marker")" = kept ] || fail "the reinstall touched the data"
 
 printf '\nAll steps passed. Evidence: %s\n' "$OUT"

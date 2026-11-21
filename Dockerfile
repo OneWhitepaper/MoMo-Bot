@@ -1,4 +1,4 @@
-# OpenMausBot harness server — hosted/self-hosted tenant image, and the
+# MoMo bot server — hosted/self-hosted tenant image, and the
 # OMB Cloud Pro home machine (docs/cloud-pro.md).
 #
 # Build the renderer + the self-contained server bundle, then ship only those
@@ -7,17 +7,15 @@
 # adds its engine CLIs before the app files, which change with every commit:
 # a code-only change rebuilds only the small app layers, so a pull downloads
 # only those. The server keeps binding 127.0.0.1 inside the container (the
-# loopback-trust invariant is the auth model); deploy/docker-compose.yml puts
-# Caddy in the same network namespace to terminate TLS and authentication at
-# the edge.
+# loopback-trust invariant is the auth model); Caddy reaches the server over Unix sockets and terminates TLS at the edge.
 #
-#   docker build -t openmausbot .
-#   docker build --build-arg ENGINES="@anthropic-ai/claude-code @openai/codex" -t openmausbot .
+#   docker build -t momobot .
+#   docker build --build-arg ENGINES="@anthropic-ai/claude-code @openai/codex" -t momobot .
 #   docker build --target cloud-home -t omb-cloud-home .
-#   docker buildx build --platform linux/arm64 -t openmausbot .   # Raspberry Pi 4/5, ARM servers
+#   docker buildx build --platform linux/arm64 -t momobot .   # Raspberry Pi 4/5, ARM servers
 #
 # HOME is the /data volume, so engine CLI logins (~/.claude, ~/.codex, ~/.grok,
-# ...) and OpenMausBot's own state (~/.openmausbot) persist across container
+# ...) and MoMo bot's own state (~/.momobot) persist across container
 # restarts.
 #
 # The bots' browsers, engines and shells leave exited processes for an init to
@@ -128,7 +126,7 @@ RUN echo "agent-browser ${AGENT_BROWSER_VERSION}, Chrome for Testing ${CHROME_CA
 #  OMB_DUCKDB_DIR: the DuckDB binding tree the server requires (no node_modules here).
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/opt/openmausbot-browser/chrome \
     OMB_DUCKDB_DIR=/app/duckdb \
-    OMB_DATA_DIR=/data/.openmausbot \
+    OMB_DATA_DIR=/data/.momobot \
     OMB_STATIC_DIR=/app/dist \
     OMB_PORT=8799 \
     OMB_WEBHOOK_PORT=8800 \
@@ -247,19 +245,32 @@ USER root
 ENTRYPOINT ["/usr/bin/tini", "-s", "--"]
 CMD ["node", "/app/dist-server/cloud-home-start.js"]
 
-# The self-hosted server, last so a plain `docker build .` builds it.
-FROM runtime AS server
+FROM runtime AS server-base
 # Optional engine CLIs baked into the image (space-separated npm packages).
 ARG ENGINES=""
 RUN if [ -n "$ENGINES" ]; then HOME=/tmp/omb-build-home npm install -g $ENGINES && rm -rf /tmp/omb-build-home /tmp/node-compile-cache; fi
+
+FROM server-base AS local-base
+ARG GROK_VERSION=1.0.41
+RUN if [ -n "$GROK_VERSION" ]; then \
+      mkdir -p /tmp/grok-install \
+      && curl -fsSL https://x.ai/cli/install.sh -o /tmp/grok-install/install.sh \
+      && HOME=/tmp/grok-install PATH="/tmp/grok-install/.grok/bin:$PATH" bash /tmp/grok-install/install.sh "$GROK_VERSION" \
+      && install -m 0755 "$(readlink -f /tmp/grok-install/.grok/bin/grok)" /usr/local/bin/grok \
+      && HOME=/tmp/grok-install grok --version | grep -qF "grok $GROK_VERSION " \
+      && rm -rf /tmp/grok-install; \
+    fi
+
+FROM server-base AS server-files
 COPY --from=build --chown=maus:maus /src/dist-native/duckdb/target ./duckdb
 COPY --from=build --chown=maus:maus /src/dist-server ./dist-server
 COPY --from=build --chown=maus:maus /src/dist ./dist
 COPY --from=build --chown=maus:maus /src/skills ./skills
-# `docker compose exec omb openmausbot pair`: the commands the CLI prints start the same way.
-RUN printf '#!/bin/sh\nexec node /app/dist-server/openmausbot.js "$@"\n' > /usr/local/bin/openmausbot && chmod 0755 /usr/local/bin/openmausbot
+# Keep the old command available to scripts that already use it.
+RUN printf '#!/bin/sh\nexec node /app/dist-server/openmausbot.js "$@"\n' > /usr/local/bin/momobot \
+ && chmod 0755 /usr/local/bin/momobot && ln -s momobot /usr/local/bin/openmausbot
 ENV HOME=/data \
-    OMB_CLI_PREFIX="docker compose exec omb openmausbot"
+    OMB_CLI_PREFIX="docker compose exec omb momobot"
 VOLUME ["/data"]
 USER maus
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
@@ -271,3 +282,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 # and collects the server's orphans as a subreaper instead of warning.
 ENTRYPOINT ["/usr/bin/tini", "-s", "--"]
 CMD ["node", "dist-server/server-launcher.js"]
+
+FROM server-files AS local
+COPY --from=local-base /usr/local/bin/grok* /usr/local/bin/
+
+FROM server-files AS server

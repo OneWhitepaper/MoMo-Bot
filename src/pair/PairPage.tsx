@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { DesktopWorkspaceSwitcher } from "../components/DesktopWorkspaceSwitcher";
+import { APP_URL_SCHEME } from "@/lib/app-links";
 import { productName } from "../lib/brand";
 
 import {
@@ -50,7 +51,7 @@ export function codeReady(code: string): boolean {
 export function openInAppLink(origin: string, code: string): string {
   const read = readPairingInput(code);
   const filled = read.kind === "code" ? `&code=${encodeURIComponent(formatPairingCode(read.code))}` : "";
-  return `openmausbot://pair?address=${encodeURIComponent(origin)}${filled}`;
+  return `${APP_URL_SCHEME}://pair?address=${encodeURIComponent(origin)}${filled}`;
 }
 
 /** Plain http to the open internet: the session cookie and every chat would cross it readable. */
@@ -169,7 +170,7 @@ export function PairPage({ initialCode, initialEmail = null, reason }: { initial
       <div className="w-full max-w-[420px]">
         {where && unencryptedPublic(where) ? <p role="alert" className="mb-4 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-[13px] text-warning">{t("pair.notEncrypted")}</p> : null}
         {opening ? (
-          <p role="status" className="text-[20px] font-semibold">{cloudHome ? t("pair.openingCloud") : t("pair.connectingTo", { name: environment?.label ?? t("pair.thisOpenMausBot") })}</p>
+          <p role="status" className="text-[20px] font-semibold">{cloudHome ? t("pair.openingCloud") : t("pair.connectingTo", { name: environment?.label ?? t("pair.thisOpenMausBot", { app: productName() }) })}</p>
         ) : <>
         <h1 className="text-[20px] font-semibold">{pairTitle(environment, mode)}</h1>
         <p className="mt-1.5 text-[14px] leading-relaxed text-ink-secondary">

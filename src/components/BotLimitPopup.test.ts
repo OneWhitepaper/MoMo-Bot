@@ -53,6 +53,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => { closeBotLimit(); root.unmount(); });
   host.remove();
+  vi.unstubAllEnvs();
   delete (window as unknown as { ogb?: unknown }).ogb;
 });
 
@@ -109,12 +110,13 @@ describe("the bot limit popup", () => {
     expect(dialog()!.querySelector("h2")?.textContent).toBe("That's more bots than Starter has room for");
   });
 
-  it("in a browser tab, with no bridge, opens the Plan page", async () => {
+  it("in a browser tab, with no bridge, opens the configured Plan page", async () => {
+    vi.stubEnv("VITE_MOMO_CLOUD_URL", "https://cloud.example.test");
     await open();
     expect(dialog()!.querySelector("p")?.textContent).toBe("To create more, upgrade this Cloud on its Plan page. Every bot you have stays as it is.");
     expect(buttons()).toEqual(["Open the Plan page", "Not now", "Close"]);
     await press("Open the Plan page");
-    expect(openExternalLink).toHaveBeenCalledExactlyOnceWith("https://cloud.openmausbot.com/cloud");
+    expect(openExternalLink).toHaveBeenCalledExactlyOnceWith("https://cloud.example.test/cloud");
   });
 
   it("on a person's other Cloud, which only reads its plan, opens its Plan page and closes", async () => {

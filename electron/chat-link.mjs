@@ -1,6 +1,8 @@
-// openmausbot://thread/<thread-id>?bot=<bot-id> and openmausbot://bot/<bot-id>. The page checks them strictly against
+// momobot://thread/<thread-id>?bot=<bot-id> and momobot://bot/<bot-id>. The page checks them strictly against
 // its chats; opening one never sends, interrupts or creates anything.
-const CHAT_LINK_PREFIXES = ["openmausbot://thread/", "openmausbot://bot/"];
+import { appLink } from "./desktop-brand.mjs";
+
+const CHAT_LINK_PREFIXES = [appLink("thread/"), appLink("bot/"), "openmausbot://thread/", "openmausbot://bot/"];
 const MAX_LINK_LENGTH = 1024;
 
 export function chatLinkFrom(value) {

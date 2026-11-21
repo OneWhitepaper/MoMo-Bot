@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const SCRIPT = join(import.meta.dirname, "..", "..", "deploy", "update.sh");
 const FAKE = join(import.meta.dirname, "fake-compose-docker.mjs");
-const REPO = "ghcr.io/milind-soni/openmausbot";
+const REPO = "ghcr.io/onewhitepaper/momo-bot";
 const posix = process.platform !== "win32";
 
 const id = (letter: string) => `sha256:${letter.repeat(64)}`;
@@ -100,6 +100,15 @@ function install(target: Record<string, unknown> = {}, extra: Record<string, unk
 describe.skipIf(!posix)("deploy/update.sh", () => {
   it("is valid bash", () => {
     expect(spawnSync("bash", ["-n", SCRIPT]).status).toBe(0);
+  });
+
+  it("requires an explicit target when no release feed is configured", () => {
+    const box = install();
+    const result = box.run([], { env: { OMB_STABLE_URL: "", OMB_NEWEST_URL: "" } });
+    expect(result.status).toBe(4);
+    expect(result.stdout).toContain("Choose a target with --image IMAGE or --version X.Y.Z.");
+    expect(box.calls()).toEqual([]);
+    expect(box.journal()).toBe(false);
   });
 
   it("copies the data aside, pins the stable image by digest, and waits until the new version answers and can start bots", () => {
@@ -435,8 +444,8 @@ describe.skipIf(!posix)("deploy/update.sh", () => {
 
   it("moves an install the installer made with Caddy in the server's network to the current files, and back on rollback", () => {
     const box = install();
-    const oldCompose = `# Written by MausBot's installer (deploy/install.sh), and written again each time it runs.
-name: openmausbot
+    const oldCompose = `# Written by the MoMo bot installer (deploy/install.sh), and written again each time it runs.
+name: momobot-server
 services:
   omb:
     image: \${OMB_IMAGE:?run the installer again}

@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer, webFrame, webUtils } = require("electron");
 
 // Sandboxed preloads get Electron's restricted `require`, which cannot load sibling CommonJS files.
 const desktopRemoteClient = process.argv.includes("--openmausbot-remote-client");
+const cloudEnabled = process.argv.includes("--momo-cloud=1");
 
 let pendingPackageInstallUrl = null;
 const packageInstallListeners = new Set();
@@ -90,22 +91,15 @@ function railKeepsItsSize() {
 if (typeof window !== "undefined") {
   for (const type of ["resize", "DOMContentLoaded"]) window.addEventListener(type, () => { leaveRailRoom(); railKeepsItsSize(); });
 }
-const REMOTE_SAFE = new Set(["platform", "app", "getCapabilities", "onCapabilitiesChanged", "applySkin", "setUnreadCount", "permStatus", "workspaces", "rail", "cloudAdd", "cloudPlan", "cloudSendPage", "placesTogether", "accountSheet", "desktopNotices", "desktopNotifications", "desktopAnalytics", "desktopLanguage", "updatesConsent", "windowControls", "onOpenAppSettings", "windowFrame", "softwareRendering", "appUpdate"]);
+const REMOTE_SAFE = new Set(["platform", "app", "getCapabilities", "onCapabilitiesChanged", "applySkin", "setUnreadCount", "permStatus", "workspaces", "rail", "cloudAdd", "cloudPlan", "cloudSendPage", "placesTogether", "accountSheet", "desktopNotices", "desktopNotifications", "desktopAnalytics", "desktopLanguage", "updatesConsent", "windowControls", "onOpenAppSettings", "windowFrame", "softwareRendering"]);
 /** My Cloud's own page once it is the person's home (main checks the sender again): it is this app's page then. */
 const HOME_PAGE = ["home", "onChatLink", "onPackageInstall", "exportDiagnostics", "openLogsFolder", "openAtLogin", "callActive"];
-function updaterOffered() {
-  try { return ipcRenderer.sendSync("update:offered") === true; } catch { return false; }
-}
 function homePage() {
   try { return ipcRenderer.sendSync("home:page") === true; } catch { return false; }
 }
 function reloadedForUpdate() {
   try { return ipcRenderer.sendSync("home:updating") === true; } catch { return false; }
 }
-function savedAnalyticsChoice() {
-  try { const saved = ipcRenderer.sendSync("desktop-analytics:read"); return typeof saved === "boolean" ? saved : null; } catch { return null; }
-}
-let analyticsChoice;
 function savedLanguageChoice() {
   try { const saved = ipcRenderer.sendSync("desktop-language:read"); return typeof saved === "string" ? saved : null; } catch { return null; }
 }
@@ -117,7 +111,7 @@ ipcRenderer.on("desktop-language:changed", (_event, language) => {
   for (const listener of languageListeners) listener(language);
 });
 const onHomePage = !isLocalPage && homePage();
-const remoteKeys = isLocalPage ? REMOTE_SAFE : new Set([...REMOTE_SAFE, ...(updaterOffered() ? ["updater"] : []), ...(onHomePage ? HOME_PAGE : [])]);
+const remoteKeys = isLocalPage ? REMOTE_SAFE : new Set([...REMOTE_SAFE, ...(onHomePage ? HOME_PAGE : [])]);
 
 // Keep in parity with shared/workspace-backup-client.ts (a sandboxed preload cannot import it).
 const COMPANY_BACKUP_CLIENT_KEYS = [
@@ -445,36 +439,13 @@ const bridge = {
   openAtLogin: {
     state: () => ipcRenderer.invoke("open-at-login:state"),
     set: on => on !== true || isLocalPage || navigator.userActivation?.isActive === true
-      ? ipcRenderer.invoke("open-at-login:set", on === true) : Promise.reject(new Error("Turn on the switch to open OpenMausBot at login.")),
+      ? ipcRenderer.invoke("open-at-login:set", on === true) : Promise.reject(new Error("Turn on the switch to open MoMo bot at login.")),
   },
   setCredential: (name, value, options) => ipcRenderer.invoke("credential:set", name, value, options),
   // Saved keys this launch could not read, and "Reset saved keys" (main asks the person first, then restarts).
   credentialStore: {
     unreadable: () => ipcRenderer.invoke("credential-store:unreadable"),
     reset: () => ipcRenderer.invoke("credential-store:reset"),
-  },
-
-  // A server's page from the Server menu, once that server is newer than this app, asks for this app's own update from
-  // the person's click. It learns only what was done; main asks in a dialog of its own before anything restarts.
-  appUpdate: {
-    request: () => navigator.userActivation?.isActive === true
-      ? ipcRenderer.invoke("update:for-server-page") : Promise.reject(new Error("Choose Update app.")),
-  },
-
-  updater: {
-    check: () => ipcRenderer.invoke("update:check"),
-    install: () => isLocalPage || navigator.userActivation?.isActive === true
-      ? ipcRenderer.invoke("update:install") : Promise.reject(new Error("Choose Restart to update.")),
-    seen: () => ipcRenderer.invoke("update:seen"),
-    onState: (cb) => {
-      ipcRenderer
-        .invoke("update:get-state")
-        .then((s) => cb(s))
-        .catch(() => {});
-      const handler = (_event, s) => cb(s);
-      ipcRenderer.on("update:state", handler);
-      return () => ipcRenderer.removeListener("update:state", handler);
-    },
   },
 
   /** A remote page may read the list but never change where this window goes. */
@@ -498,7 +469,7 @@ const bridge = {
       return () => ipcRenderer.removeListener("workspaces:open-settings", handler);
     },
   },
-  cloudAccount: process.argv.includes("--omb-company-desktop=1") ? {
+  cloudAccount: cloudEnabled ? {
     state: () => ipcRenderer.invoke("cloud-account:state"),
     begin: () => ipcRenderer.invoke("cloud-account:begin"),
     signInAgain: () => ipcRenderer.invoke("cloud-account:signInAgain"),
@@ -551,7 +522,7 @@ const bridge = {
     },
   } : undefined,
   // Either page: the one-time move's line.
-  cloudSendPage: process.argv.includes("--omb-company-desktop=1") ? {
+  cloudSendPage: cloudEnabled ? {
     notice: () => ipcRenderer.invoke("cloud-send:notice"),
     dismiss: signature => ipcRenderer.invoke("cloud-send:dismiss", String(signature)),
     moveRetry: () => isLocalPage || navigator.userActivation?.isActive === true
@@ -590,7 +561,7 @@ const bridge = {
     },
   } : undefined,
   // This computer's page and My Cloud's own page (main refuses any other): the other one's bots, listed beside this one's.
-  placesTogether: process.argv.includes("--omb-company-desktop=1") ? {
+  placesTogether: cloudEnabled ? {
     state: () => ipcRenderer.invoke("places-together:state"),
     set: on => isLocalPage || navigator.userActivation?.isActive === true
       ? ipcRenderer.invoke("places-together:set", on === true) : Promise.reject(new Error("Turn the switch to list both places' bots.")),
@@ -623,7 +594,7 @@ const bridge = {
     },
   },
   // Who is signed in on this device: this app's own pages only (main checks the sender). No token ever comes through here.
-  accounts: process.argv.includes("--omb-company-desktop=1") ? {
+  accounts: cloudEnabled ? {
     list: () => ipcRenderer.invoke("accounts:list"),
     signOut: id => ipcRenderer.invoke("accounts:sign-out", String(id)),
     addStart: email => ipcRenderer.invoke("accounts:add-start", String(email)),
@@ -646,12 +617,12 @@ const bridge = {
     },
   } : undefined,
   // Any place's page: opens the accounts sheet on the rail's page, from the person's click. The page learns nothing of them.
-  accountSheet: process.argv.includes("--omb-company-desktop=1") ? {
+  accountSheet: cloudEnabled ? {
     offered: () => ipcRenderer.invoke("accounts:offered"),
     open: () => isLocalPage || navigator.userActivation?.isActive === true
       ? ipcRenderer.invoke("accounts:open") : Promise.reject(new Error("Choose your account to open it.")),
   } : undefined,
-  cloudPlan: process.argv.includes("--omb-company-desktop=1") ? {
+  cloudPlan: cloudEnabled ? {
     state: () => ipcRenderer.invoke("cloud-plan:state"),
     manage: () => isLocalPage || navigator.userActivation?.isActive === true
       ? ipcRenderer.invoke("cloud-plan:manage") : Promise.reject(new Error("Choose Manage to open your Plan page.")),
@@ -733,13 +704,13 @@ const bridge = {
     repair: () => ipcRenderer.invoke("home:repair"),
     updating: onHomePage && reloadedForUpdate(),
   },
-  updatesConsent: {
+  updatesConsent: cloudEnabled ? {
     state: () => ipcRenderer.invoke("updates-consent:state"),
     choose: choice => ipcRenderer.invoke("updates-consent:choose", {
       status: String(choice?.status),
       ...(typeof choice?.email === "string" ? { email: choice.email } : {}),
     }),
-  },
+  } : undefined,
   desktopProfile: {
     systemName: () => ipcRenderer.invoke("desktop-profile:system-name"),
   },
@@ -763,13 +734,7 @@ const bridge = {
       return () => notificationOpenListeners.delete(cb);
     },
   },
-  desktopAnalytics: {
-    enabled: () => {
-      if (analyticsChoice === undefined) analyticsChoice = savedAnalyticsChoice();
-      return analyticsChoice;
-    },
-    ...(isLocalPage ? { set: enabled => { analyticsChoice = enabled === true; return ipcRenderer.invoke("desktop-analytics:set", analyticsChoice); } } : {}),
-  },
+  desktopAnalytics: { enabled: () => false },
   desktopLanguage: {
     choice: () => {
       if (languageChoice === undefined) languageChoice = savedLanguageChoice();

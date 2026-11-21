@@ -41,7 +41,7 @@ describe("Phone & devices", () => {
   it("with nothing paired and no way in on, shows one task: pair, with where to get the app in plain words and the ways in folded into one row", () => {
     const html = page(true);
     // One untitled card: the row says "Your phone" and what to do, and the code (with "scan this code") is only in the dialog.
-    expect(html).toMatch(/Your phone[\s\S]*?Install MausBot on your phone from the App Store or Google Play, then pair it here\./);
+    expect(html).toMatch(/Your phone[\s\S]*?Open a compatible companion app on your phone, then pair it here\./);
     expect(html).not.toContain("<h3");
     expect(html).not.toContain("this code");
     expect(html, "no store or download link in the desktop app").not.toMatch(/data-phone-app|apps\.apple\.com|\.apk|<a [^>]*App Store/);
@@ -69,6 +69,15 @@ describe("Phone & devices", () => {
     const html = page(false);
     expect(html).toMatch(/data-route-row="wifi"[\s\S]*?data-route-row="relay"[\s\S]*?Keep this computer awake[\s\S]*?More ways in/);
     expect(html).toMatch(/data-settings-disclosure="more-ways"[\s\S]*?aria-expanded="false"/);
+  });
+
+  it("offers Wi-Fi without a relay service and lets an existing relay be turned off", () => {
+    f.account = { available: false, status: "signed-out" };
+    f.state = state({ routes: routes({ wifi: true }) });
+    expect(page()).toContain('data-route-row="wifi"');
+    expect(page()).not.toContain('data-route-row="relay"');
+    f.state = state({ routes: routes({ wifi: true, relay: true }) });
+    expect(page()).toContain('data-route-row="relay"');
   });
 
   it("shows each route on since its date as a switch, and lists paired phones with Pair a phone beside the list", () => {
@@ -166,7 +175,7 @@ describe("Pair a device", () => {
     const input = (route: string) => html.match(new RegExp(`<input[^>]*value="${route}"[^>]*>`))![0];
     expect(input("wifi")).toContain('checked=""');
     expect(input("relay"), "signed out: Anywhere can't be chosen yet, and says why").toContain('disabled=""');
-    expect(html).toContain("Needs a free MausBot sign-in.");
+    expect(html).toContain("Needs a free MoMo bot sign-in.");
     expect(html).toContain('aria-label="Close"');
     expect(html).not.toContain('type="checkbox"');
     expect(html).toContain(">Turn on and show code<");
@@ -187,7 +196,7 @@ describe("route words", () => {
     expect(routeStateText(off, 0)).toBe("Off");
     expect(routeStateText({ on: true, since: NOV_7 }, 0)).toBe("On · waiting for a paired device");
     expect(reachLine({ routes: routes() })).toBe("No way in is on yet.");
-    expect(reachLine({ routes: routes({ tailscale: true, relay: true }) })).toBe("Reaches this computer on your tailnet and anywhere through MausBot.");
+    expect(reachLine({ routes: routes({ tailscale: true, relay: true }) })).toBe("Reaches this computer on your tailnet and anywhere through MoMo bot.");
   });
 });
 

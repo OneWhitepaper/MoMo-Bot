@@ -1,18 +1,18 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { Provider } from '@/components/provider';
-import { appName, siteUrl } from '@/lib/shared';
+import { appIcon, appName, siteUrl } from '@/lib/shared';
 import './global.css';
 
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
+  metadataBase: siteUrl,
   title: {
     default: appName,
     template: `%s · ${appName}`,
   },
-  description: 'MausBot docs: install, configure and extend your local-first team of AI agents. MausBot is free and open source (Apache 2.0).',
+  description: 'Install, configure and extend MoMo bot, a local workspace for your team of AI agents.',
   openGraph: {
     title: appName,
     siteName: appName,
@@ -20,8 +20,8 @@ export const metadata: Metadata = {
     type: 'website',
   },
   icons: {
-    icon: '/app-icon.svg',
-    apple: '/app-icon.svg',
+    icon: appIcon,
+    apple: '/apple-touch-icon.png',
   },
 };
 

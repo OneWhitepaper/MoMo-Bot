@@ -1,13 +1,26 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
 import { requiredScope, type RequestAuth } from "../request-auth.ts";
 import type { ServerUpdater } from "../server-update.ts";
 import type { UpdateCheck } from "../update-check.ts";
 import { dispatchRoutes } from "./table.ts";
-import { createUpdateCheckRoutes } from "./update-check.ts";
+import { createUpdateCheckRoutes, updateRouteDeps } from "./update-check.ts";
+
+it("answers with the installed version without looking up or requesting any update", async () => {
+  const fetcher = vi.fn<typeof fetch>();
+  vi.stubGlobal("fetch", fetcher);
+  try {
+    const deps = updateRouteDeps({ desktopManaged: false, managed: false });
+    expect(await deps.check()).toEqual({ current: expect.any(String), install: expect.any(String), available: false });
+    expect(deps.server).toBeUndefined();
+    expect(fetcher).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
 
 const servers: Server[] = [];
 afterEach(async () => {

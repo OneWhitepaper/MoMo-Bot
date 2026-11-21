@@ -1,13 +1,16 @@
 import type { CloudAccountState } from "../../electron/cloud-account.mjs";
 import { track } from "@/lib/analytics";
-import { teamPeoplePage } from "@/lib/app-links";
+import { teamPeoplePage, withSource } from "@/lib/app-links";
 import { TEAMS_NOTICE } from "@/lib/notices";
 import { startTeamUrl, whatsNewAudience } from "@/lib/whats-new";
 import type { WelcomeViewer } from "@/lib/onboarding";
 
 /** The Team plan's checkout on the Cloud website, tagged for this popup on the Cloud's funnel. */
 export const TEAMS_SOURCE = "app_whats_new_teams";
-export const startTeamsUrl = (staging = false) => startTeamUrl(staging).replace(/src=[^&]*/, `src=${TEAMS_SOURCE}`);
+export function startTeamsUrl(staging = false): string | null {
+  const url = startTeamUrl(staging);
+  return url ? withSource(url, TEAMS_SOURCE) : null;
+}
 
 /** What the Teams popup offers this person: on a Team Cloud, its Owner and Admins invite people from the team's People
  * page and its members are only told, as is a desktop whose Cloud sign-in is already in a team; everyone else starts a
@@ -16,7 +19,8 @@ export const startTeamsUrl = (staging = false) => startTeamUrl(staging).replace(
 export type TeamsAction =
   | { kind: "invite"; url: string }
   | { kind: "got-it" }
-  | { kind: "start"; inApp: boolean; url: string };
+  | { kind: "start"; inApp: true; url?: never }
+  | { kind: "start"; inApp: false; url: string };
 
 export function teamsAction({ team, viewer, account, canAddCloud }: {
   team: { id: string; cloudPage?: string } | null | undefined;
@@ -33,7 +37,9 @@ export function teamsAction({ team, viewer, account, canAddCloud }: {
   }
   const audience = account === null ? null : whatsNewAudience(account);
   if (audience === "team") return { kind: "got-it" };
-  return { kind: "start", inApp: canAddCloud && audience === "own", url: startTeamsUrl(account?.staging === true) };
+  if (canAddCloud && audience === "own") return { kind: "start", inApp: true };
+  const url = startTeamsUrl(account?.staging === true);
+  return url ? { kind: "start", inApp: false, url } : { kind: "got-it" };
 }
 
 export type TeamsStep = "seen" | "invite" | "start_team" | "see_team_plans" | "got_it" | "not_now" | "close";

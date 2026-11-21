@@ -1,4 +1,4 @@
-# OpenMausBot control plane
+# MoMo bot control plane
 
 This directory is an isolated Cloudflare Worker for cloud account identity,
 installation ownership, and per-installation managed companion endpoints. It
@@ -40,11 +40,10 @@ counter used for scheduled retry backoff. `0006` adds the idle-reclaim marker
 and a one-row capacity snapshot (counts and timestamps only), and gives rows
 an operator had already moved to `deleting` for active installations the same
 reconnect guard as automatic reclaims. `0007` ties every endpoint row to the
-Cloudflare account that holds it (`provider_account`, an account ID whose
-default is the account every earlier row lives in, so rows written before it,
-or by a Worker deployed before it, keep their account) and moves capacity
-state to one row per account (`managed_endpoint_account_capacity`, seeded from
-the `0006` row, which stays but is no longer written). Endpoint rows
+Cloudflare account that holds it (`provider_account`) and moves capacity state
+to one row per account. Rows and the capacity snapshot from before `0007` are
+carried forward without an assigned account. A current Worker acts only on
+rows tied to a configured account. Endpoint rows
 deliberately do not cascade away with a hard installation deletion: losing the
 tunnel and DNS IDs would make operator cleanup impossible. `0011` drops
 `account.issuer` and its unique index: `0001` created them for Better Auth
@@ -113,7 +112,7 @@ Account bearer tokens are rejected.
   recoverable from GET or D1. After an idle reclaim the same call allocates a
   new tunnel behind the **same hostname**, so a paired phone keeps its
   address; it may also take back an endpoint whose reclaim is still pending.
-  The desktop app (Remote access on) and `openmausbot serve --tunnel` ask
+  The desktop app (Remote access on) and `momobot serve --tunnel` ask
   `GET` every 15 minutes, even while their connector reports ready, and make
   this call when the endpoint is gone or in `error`; a `401` from `GET` (the
   90-day installation credential expired) sends them through account
@@ -167,9 +166,8 @@ Revoking an installation first revokes its local installation credentials, then
 schedules best-effort endpoint cleanup. Cloud cleanup failure cannot restore or
 delay credential revocation. Repeating the owner-scoped installation DELETE is
 safe and retries retained cleanup state. A five-minute cron also processes at
-most `OMB_CLEANUP_SWEEP_LIMIT` (code default 20, which `wrangler.jsonc` ships;
-it needs Workers Paid, whose per-invocation subrequest and D1 limits the
-default relies on) expired-lease rows per run when
+most `OMB_CLEANUP_SWEEP_LIMIT` (local config 3; code default 20 requires Workers
+Paid) expired-lease rows per run when
 they are already deleting, belong to a revoked installation, or outlive a
 hard-deleted installation. Each row is cleaned in its own account, and rows
 no configured account acts on (see **Several Cloudflare accounts**) are
@@ -320,23 +318,21 @@ platform, the purpose, the environment and timestamps (`migrations/0008`, `0017`
 `0018`).
 
 **Secrets the maintainer sets** (all with `wrangler secret put <NAME>
---config wrangler.jsonc`; none belongs in `vars`, this file, or CI output):
+--config wrangler.production.jsonc`; none belongs in `vars`, this file, or CI output):
 
 | Name | Value |
 | --- | --- |
 | `APNS_KEY_ID` | The 10-character Key ID of the APNs auth key (`.p8`) in the Apple Developer account. |
 | `APNS_TEAM_ID` | The 10-character Team ID that owns the app. |
-| `APNS_PRIVATE_KEY` | The whole `.p8` file, PEM, e.g. `wrangler secret put APNS_PRIVATE_KEY < AuthKey_XXXXXXXXXX.p8`. Escaped `\n` newlines are accepted too. |
+| `APNS_PRIVATE_KEY` | The whole `.p8` file, PEM, e.g. `wrangler secret put APNS_PRIVATE_KEY --config wrangler.production.jsonc < AuthKey_XXXXXXXXXX.p8`. Escaped `\n` newlines are accepted too. |
 | `APNS_BUNDLE_ID` | The iOS app's bundle id, which is the APNs topic. |
 | `APNS_ENVIRONMENTS` | Optional. `production` (default), `sandbox`, or `production,sandbox` to also accept development builds' tokens. |
-| `FCM_SERVICE_ACCOUNT` | The whole service-account JSON file of the Firebase project (Project settings → Service accounts → Generate new private key), e.g. `wrangler secret put FCM_SERVICE_ACCOUNT < service-account.json`. Only `project_id`, `client_email` and `private_key` are read. |
+| `FCM_SERVICE_ACCOUNT` | The whole service-account JSON file of the Firebase project (Project settings → Service accounts → Generate new private key), e.g. `wrangler secret put FCM_SERVICE_ACCOUNT --config wrangler.production.jsonc < service-account.json`. Only `project_id`, `client_email` and `private_key` are read. |
 
-They are deliberately not in `secrets.required`: the Worker is complete
-without them, with phone push off, until the keys exist. Apply
-`migrations/0008`, `0017` and `0018` before deploying the Worker that uses them. For
-a local trial with `wrangler dev`, `.dev.vars` is read only for declared
-names, so add these names to `secrets.required` in a local, uncommitted copy
-of the config.
+Phone push is off until its keys exist. When enabling it, add the secret names
+you use to `secrets.required` in your production config and apply migrations
+`0008`, `0017` and `0018` before deploying. Native client builds and their
+publishing credentials must come from the operator.
 
 ### Tunnel capacity and idle reclaim
 
@@ -402,8 +398,7 @@ to Cloudflare's real quotas and raise them when Cloudflare raises a quota (a
 limit below the real quota turns a genuine rate limit at that count into a
 ten-minute capacity gate for that account and, with several accounts, makes
 the account look full, so new endpoints go elsewhere while it still has
-room). `wrangler.jsonc` sets `OMB_DNS_RECORD_LIMIT` to 3500 because the
-`openmausbot.com` zone is on Pro.
+room). Set the limits for your account and zone in `wrangler.production.jsonc`.
 
 `GET /healthz` keeps `ok` and `service` unchanged (desktops gate hosted sign-in
 on them; a full quota must not hide sign-in or recovery) and adds a
@@ -438,7 +433,7 @@ ID):
   "reclaim": { "mode": "on", "pending": 12 },
   "accounts": [
     {
-      "hostSuffix": "openmausbot.com",
+      "hostSuffix": "computer.example.com",
       "newEndpoints": true,
       "status": "full",
       "checkedAt": 1790000060000,
@@ -448,7 +443,7 @@ ID):
       "reclaimPending": 12
     },
     {
-      "hostSuffix": "mausbot.si",
+      "hostSuffix": "secondary.example.org",
       "newEndpoints": true,
       "status": "ok",
       "checkedAt": 1790000000000,
@@ -483,18 +478,17 @@ and `OMB_DNS_RECORD_LIMIT` is the primary. Without `CLOUDFLARE_ENDPOINT_ACCOUNTS
 it is the only account, and endpoints behave exactly as described above.
 
 `CLOUDFLARE_ENDPOINT_ACCOUNTS` adds up to three more accounts. It is a JSON
-array, set either as a `wrangler.jsonc` JSON var (see the commented example
-there) or as a secret holding the same JSON
-(`wrangler secret put CLOUDFLARE_ENDPOINT_ACCOUNTS`) to keep the IDs out of the
-repository:
+array, set either as a JSON var in `wrangler.production.jsonc` or as a secret
+holding the same JSON (`wrangler secret put CLOUDFLARE_ENDPOINT_ACCOUNTS
+--config wrangler.production.jsonc`):
 
 ```json
 [
   {
     "accountId": "<32-hex Cloudflare account ID>",
-    "zoneId": "<32-hex zone ID of mausbot.si in that account>",
-    "companionHostSuffix": "mausbot.si",
-    "apiTokenSecret": "CLOUDFLARE_API_TOKEN_MAUSBOT_SI",
+    "zoneId": "<32-hex zone ID of secondary.example.org in that account>",
+    "companionHostSuffix": "secondary.example.org",
+    "apiTokenSecret": "CLOUDFLARE_API_TOKEN_SECONDARY",
     "tunnelLimit": 1000,
     "dnsRecordLimit": 200,
     "minAppVersion": "0.1.104"
@@ -594,27 +588,18 @@ Cloudflare. Every such refusal, with one account too, logs
 `"alert": "managed_endpoint_account_refused"` with the account's `hostSuffix`
 and `errorCode`; only an operator can fix the token.
 
-**Why `minAppVersion`.** Desktop releases up to 0.1.103 accept only
-`openmausbot.com` names for **Remote computer → Desktop companion** pairing
-(phones, pairing links, and Tailscale have no domain rule). The desktop app
-accepts `mausbot.si` from the release that ships this change, and from the
-same release it reports its version with every endpoint request; older apps
-are judged by the version they registered with. Set `minAppVersion` to that
-release so a computer on an older release keeps an address every desktop can
-pair with. Leaving it out brings relief sooner, because computers on older
-releases get an address in the new account at once; desktop-companion
-pairing from an older desktop to those computers then fails (phones and
-Tailscale still work).
+**Choosing `minAppVersion`.** For desktop-to-desktop pairing, the app must
+allow the managed hostname suffix. Set `minAppVersion` to the first desktop
+release that accepts your new suffix. This gives older computers an address
+from an account their desktop release recognizes.
 
 **Adding an account.**
 
 1. Ship an app release whose desktop-companion allow-list
    (`electron/desktop-companion-client.mjs`) includes the new domain.
-2. Apply migration `0007` to the production database before deploying a
-   Worker built from this code (an older Worker keeps working against it),
-   and deploy with only the primary account first. `/healthz` is unchanged;
-   a full account now answers `endpoint_capacity` instead of
-   `endpoint_rate_limited`.
+2. Apply the D1 migrations with `wrangler.production.jsonc` before deploying,
+   and start with the primary account. If you have endpoint rows from before
+   migration `0007`, follow the import guidance below before adding accounts.
 3. Add the domain to the other account as a zone and wait until it is active
    and its Universal SSL certificate is issued (check that CAA records allow
    Cloudflare's certificate authorities; the scan does not check TLS). Read
@@ -628,12 +613,12 @@ Tailscale still work).
    (`POST accounts/<account id>/cfd_tunnel` with
    `{"name": "omb-token-check", "config_src": "cloudflare"}`) and a TXT record
    in the zone, then delete both.
-5. `wrangler secret put CLOUDFLARE_API_TOKEN_MAUSBOT_SI` (or the name you
-   chose). Never put a token in `vars`, `.dev.vars.example`, logs, or CI output.
+5. `wrangler secret put CLOUDFLARE_API_TOKEN_SECONDARY --config
+   wrangler.production.jsonc` (or the secret name you chose). Never put a token in `vars`, `.dev.vars.example`, logs, or CI output.
 6. Set `CLOUDFLARE_ENDPOINT_ACCOUNTS` with `dnsRecordLimit` equal to the
    zone's real quota and `minAppVersion` as above. Add the token's secret name
    (and `CLOUDFLARE_ENDPOINT_ACCOUNTS`, when it is a secret) to
-   `secrets.required` in `wrangler.jsonc`, then deploy. A deploy explicitly
+   `secrets.required` in `wrangler.production.jsonc`, then deploy. A deploy explicitly
    keeps only the secrets listed there, and refuses to run while one of them
    is missing, so a listed token can never be dropped or forgotten.
 7. After the next cron run, `/healthz` lists the new suffix in
@@ -664,9 +649,13 @@ the same Cloudflare user share its 1,200 requests per five minutes. On
 Workers Free, three accounts with `OMB_CLEANUP_SWEEP_LIMIT` 3 use the whole
 50-subrequest budget; a fourth needs the limit at 2.
 
-### MausBot Relay
+### Phone relay
 
-Phones reach a desktop through MausBot Relay, end-to-end encrypted: the relay passes sealed bytes and can't open them
+MoMo bot does not configure a hosted phone relay. The wire protocol still
+validates the upstream relay hostname pattern; operating a private relay on a
+new domain also requires updating the clients and relay validation.
+
+Phones can reach a desktop through an end-to-end encrypted relay: the relay passes sealed bytes and can't open them
 (`companion/src/e2e/README.md`). This Worker only lets a computer onto the relay. It mints a 12-hour host token signed
 with Ed25519; the relay holds only the public key and checks tokens offline, so it can't mint one itself.
 
@@ -696,7 +685,7 @@ old one; no identifiers) answers:
 - **Usage per day** (`migrations/0014`). `relay_daily` counts installations once per UTC day and kind: `seen` (asked
   for a token), `token` (got one), `e2e` (reported end-to-end phones), `new` (asked for the first time). It holds only
   the day, the kind and a count; `relay_adoption.first_seen_at`, `token_at` and `e2e_at` tell a request whether its
-  installation was already counted today. The stats dashboard (stats.openmausbot.com) charts it. A Worker without the
+  installation was already counted today. A Worker without the
   migration keeps minting tokens and writing `relay_adoption`, and logs `relay_daily_schema` once per isolate.
 - **Tunnels.** From `RELAY_CAPABLE_MIN_VERSION`, a desktop at that version or later that the relay can carry (it is
   on, the computer is inside the rollout and not blocked) and that reports `legacyDevices: 0` gets `409 relay_capable`
@@ -706,7 +695,7 @@ old one; no identifiers) answers:
 ### Releasing tunnels
 
 A running desktop keeps its connector up, so idle reclaim never sees its tunnel as idle. These rules give tunnels back
-once the relay has replaced them. Each switch is off in `wrangler.jsonc`; all need migrations `0015` and `0016`. The cron only
+once the relay has replaced them. The local config sets no release policy; these options need migrations `0015` and `0016`. The cron only
 marks rows `deleting` (at most 20 a run, every reason together) and the cleanup sweep removes them; the row and its
 hostname stay, so a later provisioning call returns the same address.
 
@@ -746,7 +735,7 @@ hostname stay, so a later provisioning call returns the same address.
   removal still refused as connected after its rounds does not count as waiting: it backs off (5 minutes up to 24
   hours) and retries while the sweep and the marking go on. A marked row is a final delete: its owner is answered
   `409 endpoint_busy` until the sweep has removed it.
-- **Self-hosted servers.** A server (`openmausbot serve --tunnel`, a fleet container with `OMB_INSTALLATION_CREDENTIAL`)
+- **Self-hosted servers.** A server (`momobot serve --tunnel`, a fleet container with `OMB_INSTALLATION_CREDENTIAL`)
   has no phone relay of its own: its tunnel is its public address (web UI, the desktop app's connection to it,
   webhooks). Provisioning never answers a server `relay_capable` (no `retired`, no `full`; at the limit it gets
   `503 endpoint_capacity`), and the cron never marks a server's tunnel for `relay_proven` or `legacy_cutoff`. The
@@ -788,14 +777,14 @@ hostname stay, so a later provisioning call returns the same address.
   `TUNNEL_REASON_MIN_VERSION` to that release, then raise `TUNNEL_LEGACY_PHONE_CUTOFF_PERCENT` 10, then 100, and last
   set `TUNNEL_MIN_APP_VERSION`.
 
-Setup, once:
+For an operator who already has compatible clients and relay infrastructure:
 
-1. `wrangler d1 migrations apply DB --config wrangler.jsonc --remote` (0012, and 0014 for the daily counts; apply 0014
+1. `wrangler d1 migrations apply DB --config wrangler.production.jsonc --remote` (0012, and 0014 for the daily counts; apply 0014
    before deploying the Worker that writes it).
 2. Make a key pair: a 32-byte Ed25519 seed for this Worker, its public key for the relay's `RELAY_TOKEN_KEYS`
-   (`{"k1":"<b64u public key>"}`). `wrangler secret put RELAY_TOKEN_SIGNING_KEY --config wrangler.jsonc` with the seed as
-   base64url. Until it exists every request answers 503. Once it is set it is listed in `secrets.required`: a deploy
-   keeps only the secrets listed there, so an unlisted one is dropped. Set it before deploying a config that lists it.
+   (`{"k1":"<b64u public key>"}`). `wrangler secret put RELAY_TOKEN_SIGNING_KEY --config wrangler.production.jsonc` with the seed as
+   base64url. Until it exists every request answers 503. List the secret in the production config's
+   `secrets.required` so it survives deploys.
 3. Admit the team with `RELAY_ALLOW_INSTALLATIONS`, then raise `RELAY_ROLLOUT_PERCENT` 10, 50, 100 while watching the
    relay alerts. `RELAY_DISABLED: "1"` turns every token off at once; tokens already issued expire within 12 hours.
 4. To rotate, give the relay both public keys, set `RELAY_TOKEN_KID` and the new secret, deploy, then drop the old key
@@ -811,20 +800,18 @@ pnpm control-plane:test
 pnpm control-plane:dry-run
 ```
 
-For local manual development, copy `.dev.vars.example` to `.dev.vars`, replace
-`BETTER_AUTH_SECRET` with at least 32 cryptographically random bytes, provide a
-non-production scoped `CLOUDFLARE_API_TOKEN`, apply the migrations locally, and
-start Wrangler:
+For manual development, run these commands from `cloudflare/control-plane`:
 
 ```sh
-pnpm --filter @openmausbot/control-plane exec wrangler d1 migrations apply DB --local --config wrangler.jsonc
-pnpm --filter @openmausbot/control-plane exec wrangler dev --config wrangler.jsonc
+cp -n .dev.vars.example .dev.vars
+pnpm exec wrangler d1 migrations apply DB --local --config wrangler.local.jsonc
+pnpm exec wrangler dev --local-protocol https --config wrangler.local.jsonc
 ```
 
-Do not commit `.dev.vars`. Because `wrangler.jsonc` declares
-`secrets.required`, `wrangler dev` reads from `.dev.vars` only the names it
-declares, so a second account cannot be configured there; the test suite
-covers several accounts, and `.dev.vars.example` says how to try one by hand.
+Set `BETTER_AUTH_SECRET` in `.dev.vars` to a random value of at least 32 bytes
+before starting. The local config uses `https://localhost:8787`, a simulated
+email binding, and a token that has no Cloudflare access. Keep `.dev.vars`
+out of Git.
 
 ## Troubleshooting managed HTTPS setup
 
@@ -856,7 +843,7 @@ companion on port `8810` also does not prove managed HTTPS is ready.
 2. Check the scope of failures without exporting account or installation data:
 
    ```sh
-   pnpm --filter @openmausbot/control-plane exec wrangler d1 execute DB --remote --command "SELECT provider_account, status, last_error_code, COUNT(*) AS endpoints FROM installation_endpoints GROUP BY provider_account, status, last_error_code"
+   pnpm --filter @openmausbot/control-plane exec wrangler d1 execute DB --config wrangler.production.jsonc --remote --command "SELECT provider_account, status, last_error_code, COUNT(*) AS endpoints FROM installation_endpoints GROUP BY provider_account, status, last_error_code"
    ```
 
 3. Check **account-wide** undeleted tunnel usage in the endpoint's Cloudflare
@@ -896,46 +883,54 @@ Run it from the repository root. It uses synthetic credentials and a loopback
 server, never a real account, cloud tunnel, or the user's desktop data. It
 verifies client recovery, not live Cloudflare availability or iPhone pairing.
 
-## Production blockers
+## Operator deployment
 
-The checked-in Wrangler file is intentionally non-deployable production
-scaffolding. No remote resource was created or changed while preparing it.
-Before a production deployment, an operator must:
+From `cloudflare/control-plane`, copy `wrangler.local.jsonc` to the ignored
+`wrangler.production.jsonc`. All commands in this section run from that
+folder. Fill the production file with resources from your Cloudflare account:
 
-1. Choose and route an HTTPS hostname, then replace `BETTER_AUTH_URL`. The
-   Worker has `workers_dev` disabled and no production route in this PR.
-2. Generate a strong production `BETTER_AUTH_SECRET` and add it with Wrangler's
-   interactive secret command. Add `CLOUDFLARE_API_TOKEN` the same way. The
-   checked-in `secrets.required` names validate local configuration and generate
-   binding types; they do not contain or upload values.
-3. Create the D1 database, replace the all-zero `database_id`, review the pinned
-   migrations, and apply them to that database.
-4. Complete Cloudflare Email Sending domain onboarding, replace the placeholder
-   sender in both `EMAIL_FROM` and `allowed_sender_addresses`, and grant the
-   deployment identity access to the binding. The Cloudflare session used while
-   preparing this code could not list Email Sending (`2036 Unauthorized`), so no
-   domain or binding activation was attempted.
-5. Create a least-privilege Cloudflare API token scoped to the selected account
-   and zone. It needs a Cloudflare Tunnel/`cloudflared` connector **Write**
-   permission plus DNS **Read** and **Write** for that zone. Set
-   `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID`, and add the token through
-   `wrangler secret put CLOUDFLARE_API_TOKEN`. Never put the token in `vars`,
-   `.dev.vars.example`, logs, or CI output.
-6. Set `COMPANION_HOST_SUFFIX` to the certificate-covered DNS suffix where
-   opaque `c-*` records may be created. The configured zone must contain that
-   suffix. This change does not create the zone, certificate, or any remote
-   tunnel/DNS resources during build or tests. Further accounts are optional
-   and added later (see **Several Cloudflare accounts**).
-7. Replace `ALLOWED_ORIGINS` with a comma-separated allow-list of exact HTTPS
-   application origins. Wildcards are deliberately unsupported.
-8. Optional, for closed-app phone alerts: apply `migrations/0008`, `0017` and `0018`, then set
-   the APNs and FCM secrets listed under **Phone push relay**. Without them the
-   push routes answer `503 push_unavailable` and nothing else changes.
-9. Deploy the Worker and verify that `GET <BETTER_AUTH_URL>/healthz` returns
-   `"ok": true` and `"service": "openmausbot-control-plane"` over HTTPS
-   before shipping the desktop build. Electron probes this endpoint and
-   keeps new hosted onboarding hidden until it is healthy; an already signed-in
-   user remains visible so cleanup and recovery are not stranded.
+1. Set a Worker `name` without the `-local` suffix and the owning `account_id`.
+   Set `BETTER_AUTH_URL` to your HTTPS origin and add that hostname under
+   `routes` with `custom_domain: true`. Set `ALLOWED_ORIGINS` to the exact HTTPS
+   application origins, separated by commas.
+2. Create a D1 database and set its `database_name` and `database_id` in the
+   `DB` binding. Apply migrations to that DB before deploying the Worker.
+3. Onboard your email sender in Cloudflare. Set both `EMAIL_FROM` and
+   `send_email[0].allowed_sender_addresses` to that verified address (the latter
+   is an array). Store `BETTER_AUTH_SECRET` and `CLOUDFLARE_API_TOKEN` as Worker
+   secrets. The API token needs Tunnel **Write** plus DNS **Read** and **Write**
+   for the selected account and zone.
+4. Set `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID`, and
+   `COMPANION_HOST_SUFFIX` to your managed tunnel account and certificate-covered
+   DNS zone. For desktop-to-desktop pairing, include your suffix in your build
+   using `NEXT_MANAGED_COMPANION_HOST_SUFFIX` in
+   `electron/desktop-companion-client.mjs`.
+5. Set your account's quotas and add `"triggers": { "crons": ["*/5 * * * *"] }`
+   for scheduled cleanup and capacity checks. Leave reclaim on `observe`
+   until you review the counts. Set `OMB_CLEANUP_SWEEP_LIMIT` for your Workers
+   plan. Phone relay and push can stay off.
+
+```sh
+pnpm exec wrangler deploy --dry-run --config wrangler.production.jsonc
+pnpm exec wrangler d1 migrations apply DB --remote --config wrangler.production.jsonc
+pnpm exec wrangler deploy --config wrangler.production.jsonc --secrets-file .dev.vars.production
+```
+
+For a first deployment, supply the required secrets through an ignored
+`.dev.vars.production` file and remove it once the deployment succeeds. On an
+existing Worker, set a secret with `pnpm exec wrangler secret put <NAME>
+--config wrangler.production.jsonc` and deploy without `--secrets-file`.
+Keep credentials out of `vars`. Add any optional secrets you use to the
+production config's `secrets.required` list so subsequent deploys keep them.
+
+For an imported DB with pre-`0007` data, verify which account owns each endpoint
+before assigning the all-zero `provider_account` rows to it. This also applies
+to the legacy capacity snapshot. Leave any imported endpoint unassigned when
+ownership cannot be verified. Fresh D1 databases need no data backfill.
+
+After deployment, check `GET <BETTER_AUTH_URL>/healthz` for `"ok": true` and
+`"service": "openmausbot-control-plane"` (the protocol identifier). Set
+`OMB_CONTROL_PLANE_URL` for the MoMo bot app/server to use your own service.
 
 The control-plane API token is never handed to a desktop. A desktop receives
 only its tunnel connector token, which can run that one remotely managed tunnel.

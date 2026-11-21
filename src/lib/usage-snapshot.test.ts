@@ -181,6 +181,7 @@ function hostileSources(overrides: Partial<UsageSources> = {}): UsageSources & {
 async function freshModules() {
   vi.resetModules();
   vi.doMock("posthog-js", () => ph.module());
+  vi.stubEnv("VITE_MOMO_ANALYTICS_TOKEN", "phc_test");
   const analytics = await import("./analytics");
   const snapshot = await import("./usage-snapshot");
   await analytics.initAnalytics();

@@ -20,7 +20,7 @@ export interface TeamCatalogEntry {
 }
 
 export interface TeamCatalog {
-  repositoryUrl: string;
+  repositoryUrl: string | null;
   teams: TeamCatalogEntry[];
 }
 

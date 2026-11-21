@@ -290,7 +290,7 @@ export function createShareHost(deps: ShareHostDeps) {
       ...(record.link ? { link: record.link } : {}),
       ...(record.prUrl ? { prUrl: record.prUrl } : {}),
       ...(record.error ? { error: record.error } : {}),
-      ...(fallback ? { fallback } : {}),
+      ...(fallback ? { fallback, ...(deps.publisher.uploadUrl ? { uploadUrl: deps.publisher.uploadUrl } : {}) } : {}),
     };
   };
 

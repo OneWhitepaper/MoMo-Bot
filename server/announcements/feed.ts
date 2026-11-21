@@ -1,18 +1,15 @@
-// The announcements feed, as the model manifest (server/model-manifest/manifest.ts) keeps its list: a copy bundled with
-// this release, a disk cache of the last good download, and a download from main on raw.githubusercontent.com. The
-// fetch, cache and failure handling follow that file line for line; the two should become one helper once both are on
-// main. Unlike the manifest it never runs on a timer of its own: a page asks for the cards at launch and about hourly
-// (src/lib/announcements.ts), and that ask refreshes the copy here when it is an hour old, so a server nobody opens never
-// downloads it. The request is a plain anonymous GET: no cookie, no id, no version.
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import bundledFeedJson from "../../announcements/announcements.json" with { type: "json" };
-import { ANNOUNCEMENTS_URL, liveCards, parseAnnouncementFeed, type AnnouncementCard, type AnnouncementFeed } from "../../shared/announcements.ts";
+import { liveCards, parseAnnouncementFeed, type AnnouncementCard, type AnnouncementFeed } from "../../shared/announcements.ts";
 import { writeFileAtomic } from "../atomic.ts";
 import { DATA_DIR } from "../config.ts";
+import { configuredEndpoint } from "../configured-endpoint.ts";
+import { PRODUCT_NAME } from "../../shared/product-brand.ts";
 
 /** "1" stops the download and every remote card on this server's pages, the bundled ones included. */
+export const ANNOUNCEMENTS_URL_ENV = "OMB_ANNOUNCEMENTS_URL";
 export const ANNOUNCEMENTS_DISABLE_ENV = "OMB_DISABLE_ANNOUNCEMENTS";
 export const ANNOUNCEMENTS_TTL_MS = 60 * 60 * 1000;
 /** Back off failed fetches, so an offline computer does not try on every page load. */
@@ -46,6 +43,7 @@ const updatedAtMs = (feed: AnnouncementFeed) => Date.parse(feed.updatedAt);
 
 export class AnnouncementStore {
   private readonly options: AnnouncementStoreOptions;
+  private readonly feedUrl: URL | null;
   private readonly cachePath: string;
   private feed: AnnouncementFeed;
   private fetchedAtMs: number | null = null;
@@ -55,6 +53,8 @@ export class AnnouncementStore {
 
   constructor(options: AnnouncementStoreOptions) {
     this.options = options;
+    const env = options.env ?? process.env;
+    this.feedUrl = env[ANNOUNCEMENTS_DISABLE_ENV] === "1" ? null : configuredEndpoint(env[ANNOUNCEMENTS_URL_ENV]);
     this.feed = options.bundled ?? BUNDLED_ANNOUNCEMENTS;
     this.cachePath = announcementsCachePath(options.dataDir);
   }
@@ -68,7 +68,7 @@ export class AnnouncementStore {
   }
 
   get disabled(): boolean {
-    return (this.options.env ?? process.env)[ANNOUNCEMENTS_DISABLE_ENV] === "1";
+    return this.feedUrl === null;
   }
 
   /** The newest usable copy. Reads the disk cache once and never waits on the network. */
@@ -85,8 +85,9 @@ export class AnnouncementStore {
   /** Skipped inside `ttlMs` of the last good fetch and for a while after a failed one, unless `force`. Concurrent calls
    * share one request. Never throws. */
   refresh(options: { force?: boolean; ttlMs?: number } = {}): Promise<AnnouncementFeed> {
-    if (this.disabled) return Promise.resolve(this.current());
-    this.inflight ??= this.fetchAndStore(Boolean(options.force), options.ttlMs ?? ANNOUNCEMENTS_TTL_MS).finally(() => {
+    const url = this.feedUrl;
+    if (!url) return Promise.resolve(this.current());
+    this.inflight ??= this.fetchAndStore(url, Boolean(options.force), options.ttlMs ?? ANNOUNCEMENTS_TTL_MS).finally(() => {
       this.inflight = undefined;
     });
     return this.inflight;
@@ -127,7 +128,7 @@ export class AnnouncementStore {
     }
   }
 
-  private async fetchAndStore(force: boolean, ttlMs: number): Promise<AnnouncementFeed> {
+  private async fetchAndStore(url: URL, force: boolean, ttlMs: number): Promise<AnnouncementFeed> {
     this.current();
     const now = this.now;
     // Expire timestamps from the future after a clock rollback; the cache crosses restarts, so no monotonic clock.
@@ -138,7 +139,7 @@ export class AnnouncementStore {
 
     let fetched: AnnouncementFeed;
     try {
-      const result = await this.download();
+      const result = await this.download(url);
       fetched = result.feed;
       for (const skipped of result.skipped) this.log(`skipping ${skipped}`);
     } catch (error) {
@@ -162,12 +163,12 @@ export class AnnouncementStore {
     return this.feed;
   }
 
-  private async download(): Promise<{ feed: AnnouncementFeed; skipped: string[] }> {
+  private async download(url: URL): Promise<{ feed: AnnouncementFeed; skipped: string[] }> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs ?? ANNOUNCEMENTS_FETCH_TIMEOUT_MS);
     try {
-      const response = await (this.options.fetch ?? fetch)(ANNOUNCEMENTS_URL, {
-        headers: { accept: "application/json", "user-agent": "OpenMausBot" },
+      const response = await (this.options.fetch ?? fetch)(url.href, {
+        headers: { accept: "application/json", "user-agent": PRODUCT_NAME },
         // Nothing of the person's goes with it.
         credentials: "omit",
         referrerPolicy: "no-referrer",

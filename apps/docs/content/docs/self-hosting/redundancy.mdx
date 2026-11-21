@@ -1,10 +1,14 @@
 ---
-title: Redundancy
+title: Redundancy reference (upstream)
 description: Keep a standby server in a second place that can take over when your server goes down. One server runs at a time.
 icon: ServerCog
 ---
 
-A MausBot server keeps everything in one data folder, and only one server may run on it at a time. Redundancy is therefore one **active** server and one **standby** in another place: the standby keeps a copy of the active server's data, and starts on that copy only when the active server is gone. Never run both.
+<Callout type="info" title="Reference for the original OpenMausBot layout">
+  MoMo bot does not configure a standby or take over automatically. This upstream recipe uses OpenMausBot’s installer, container names, and data paths. For the applicable MoMo bot layout, see [Deploy on a VPS](/docs/self-hosting/deploy-vps) and [Data and backups](/docs/self-hosting/data-and-backups).
+</Callout>
+
+An OpenMausBot server keeps everything in one data folder, and only one server may run on it at a time. Redundancy is therefore one **active** server and one **standby** in another place: the standby keeps a copy of the active server's data, and starts on that copy only when the active server is gone. Never run both.
 
 MausBot has no built-in standby or automatic takeover. This page is a recipe you run yourself, with plain tools (`sqlite3`, `rsync`, `ssh`, `cron`). Below, A is the active server and B the standby.
 
@@ -20,7 +24,7 @@ Everything is under the server's home: its own folder (`.openmausbot`) and the e
 
 | Install | Folder to copy | The server's own folder inside it |
 |---|---|---|
-| [Installer](/docs/self-hosting/deploy-vps#quick-start-one-command-on-your-own-domain) | `/opt/openmausbot/data` | `.openmausbot` |
+| Upstream installer | `/opt/openmausbot/data` | `.openmausbot` |
 | npm service, user `maus` | `/home/maus` | `.openmausbot` |
 
 Most of it is ordinary files. Three are SQLite databases the server keeps open and writes all the time, in WAL mode: `messages.db`, `runtime.db` and `bursts.db`. Their newest changes sit in the `-wal` file beside each until SQLite folds them in. **Do not copy these files with `rsync` or `cp` while the server runs.** In our test, a plain copy of `messages.db` taken while the server ran was missing every message still in the WAL file. SQLite's own `VACUUM INTO` makes a complete, consistent copy while the server keeps writing.

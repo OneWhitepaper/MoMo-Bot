@@ -7,15 +7,22 @@ import nativeText from "./native-text.cjs";
 
 const { englishText } = nativeText;
 
-export const CLOUD_ORIGIN = "https://cloud.openmausbot.com";
-/** The staging Admin (Dodo test mode, real test Clouds): a fixed address, on only with OMB_CLOUD_STAGING=1. */
-export const STAGING_CLOUD_ORIGIN = "https://omb-cloud-staging.fly.dev";
-/** Which Admin this app signs in to, and the files that depend on it (the sign-in, saved servers with the Cloud's
- * entry, Files' state, the Cloud's chosen name): staging never reads or writes production's. */
+function configuredCloudOrigin(value) {
+  const input = typeof value === "string" ? value.trim() : "";
+  try {
+    const url = new URL(input);
+    return url.protocol === "https:" && (input === url.origin || input === `${url.origin}/`) ? url.origin : "";
+  } catch {
+    return "";
+  }
+}
+
 export function cloudTarget(env = process.env) {
-  return env?.OMB_CLOUD_STAGING === "1"
-    ? { origin: STAGING_CLOUD_ORIGIN, staging: true, file: "cloud-account-staging.bin", saved: "cloud-accounts-staging.bin", places: "account-places-staging.json", environments: "environments-staging.json", sync: "cloud-sync-staging", look: "cloud-home-look-staging.json" }
-    : { origin: CLOUD_ORIGIN, staging: false, file: "cloud-account.bin", saved: "cloud-accounts.bin", places: "account-places.json", environments: "environments.json", sync: "cloud-sync", look: "cloud-home-look.json" };
+  const staging = env.MOMO_CLOUD_STAGING === "1";
+  const origin = configuredCloudOrigin(staging ? env.MOMO_CLOUD_STAGING_URL : env.MOMO_CLOUD_URL);
+  return staging
+    ? { origin, staging, file: "cloud-account-staging.bin", saved: "cloud-accounts-staging.bin", places: "account-places-staging.json", environments: "environments-staging.json", sync: "cloud-sync-staging", look: "cloud-home-look-staging.json" }
+    : { origin, staging, file: "cloud-account.bin", saved: "cloud-accounts.bin", places: "account-places.json", environments: "environments.json", sync: "cloud-sync", look: "cloud-home-look.json" };
 }
 const TOKEN = /^omc_[A-Za-z0-9_-]{43}$/;
 const CODE = /^[A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{5}$/;
@@ -70,12 +77,13 @@ export function checkoutDestination(value, { fixture = false, staging = false } 
   return url.href;
 }
 // Never accept an address from the renderer.
-export function cloudOrigin(value = CLOUD_ORIGIN, fixture = false) {
-  const url = new URL(value);
-  if (value !== url.origin || (![CLOUD_ORIGIN, STAGING_CLOUD_ORIGIN].includes(value) && !(fixture && url.protocol === "http:" && ["127.0.0.1", "[::1]"].includes(url.hostname)))) {
-    throw new Error("Invalid MausBot Cloud address.");
-  }
-  return value;
+export function cloudOrigin(value, fixture = false, configuredOrigin) {
+  if (value && value === configuredCloudOrigin(configuredOrigin)) return value;
+  try {
+    const url = new URL(value);
+    if (fixture && value === url.origin && url.protocol === "http:" && ["127.0.0.1", "[::1]"].includes(url.hostname)) return value;
+  } catch {}
+  throw new Error("Invalid MoMo bot Cloud address.");
 }
 export const createCloudAccountStore = createManagedDesktopStore;
 // oxlint-disable-next-line no-control-regex
@@ -97,10 +105,9 @@ function addOffer(result) {
 }
 
 export function createCloudAccountClient({ store, openBrowser, platform, deviceName, appVersion,
-  origin = CLOUD_ORIGIN, fixture = false, fetch: fetcher = globalThis.fetch, now = Date.now, onState = () => {},
+  origin, configuredOrigin, staging = false, fixture = false, fetch: fetcher = globalThis.fetch, now = Date.now, onState = () => {},
   setTimer = setTimeout, clearTimer = clearTimeout, warn = message => console.warn(message), awaitingWake = () => false, t = englishText.t, readWaitMs = READ_WAIT_MS }) {
-  origin = cloudOrigin(origin, fixture);
-  const staging = origin === STAGING_CLOUD_ORIGIN;
+  origin = cloudOrigin(origin, fixture, configuredOrigin);
   let grant = null, issued = null, cleanup = null, pending = null, cleanupNeeded = false;
   /** `resetUsed`: the person cleared a saved sign-in this computer couldn't use (resetSaved); from then on this run, a new sign-in
    * that can't be saved is kept in memory only (`unsaved`). `stuckSince`: the first failed read of the saved one. */
@@ -196,7 +203,7 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
       !(input.expiresAt === null || timestamp(input.expiresAt)) || !Number.isSafeInteger(input.version) || input.version < 0) throw new Error("Invalid Cloud entitlement.");
     const plan = input.plan === "free" ? "free" : "pro";
     if (input.status === "active" && (plan !== "pro" || input.expiresAt === null || input.expiresAt <= now())) throw new Error("Invalid active Cloud entitlement.");
-    if (newer && !newerPlans.has(input.plan)) { newerPlans.add(input.plan); warn(`[cloud] MausBot Cloud sent plan "${input.plan}", newer than this app; treating it as paid.`); }
+    if (newer && !newerPlans.has(input.plan)) { newerPlans.add(input.plan); warn(`[cloud] MoMo bot Cloud sent plan "${input.plan}", newer than this app; treating it as paid.`); }
     const tier = typeof input.tier === "string" && TIER.test(input.tier) ? input.tier : newer ? input.plan : undefined;
     return { plan, ...(tier ? { tier } : {}), status: input.status,
       expiresAt: input.expiresAt, version: input.version };
@@ -438,7 +445,7 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
     if (typeof plan !== "string" || !TIER.test(plan) || !CHECKOUT_SOURCES.includes(source)) throw new Error("Invalid Cloud checkout.");
     const current = state();
     if (current.status === "signed-out" && !grant) return { outcome: "signing-in", state: await begin({ plan, source }) };
-    if (current.status !== "connected" || !grant) throw new Error("Sign in to MausBot Cloud before choosing a plan.");
+    if (current.status !== "connected" || !grant) throw new Error("Sign in to MoMo bot Cloud before choosing a plan.");
     const signedIn = grant;
     let destination;
     try {
@@ -513,7 +520,7 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
     /** The Cloud this checkout bought was opened, announced or shown ready: the purchase is over (Add a Cloud… says one Cloud for now). */
     checkoutDone() { if (opened && !opened.done) { opened = { ...opened, done: true }; publish(value); } },
     async signInAgain() {
-      if (state().status !== "reauth-required") throw new Error("This computer is still signed in to MausBot Cloud.");
+      if (state().status !== "reauth-required") throw new Error("This computer is still signed in to MoMo bot Cloud.");
       publish({ status: "connecting" });
       const forgotten = await forget({ quiet: true });
       if (forgotten.status === "unavailable") return forgotten;
@@ -631,7 +638,7 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
     async interest(kind) {
       if (kind !== "another_cloud") throw new Error("Invalid Cloud interest.");
       const signedIn = grant;
-      if (!signedIn || state().status !== "connected") throw new Error("Sign in to MausBot Cloud first.");
+      if (!signedIn || state().status !== "connected") throw new Error("Sign in to MoMo bot Cloud first.");
       const result = await request("interest", { method: "POST", body: { kind }, token: signedIn.token });
       if (result?.ok !== true) throw new Error("Invalid Cloud response.");
     },
@@ -851,7 +858,7 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
      * `installation`: this computer, which the Admin lets take it only if it is the one the Cloud's things come home to. */
     async exportHome({ installation } = {}) {
       const current = grant;
-      if (!current) throw new Error("Sign in to MausBot Cloud first.");
+      if (!current) throw new Error("Sign in to MoMo bot Cloud first.");
       let result;
       try { result = await request("export", { method: "POST", body: installation ? { installation } : {}, token: current.token }); } catch (error) {
         if (error?.status === 409) return { notHeld: true };
@@ -936,12 +943,12 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
     /** The account's answer to the product-updates question (GET /api/cloud/desktop/updates-consent), as the Admin sends it. */
     async updatesConsent() {
       const current = grant;
-      if (!current || state().status !== "connected") throw new Error("Sign in to MausBot Cloud first.");
+      if (!current || state().status !== "connected") throw new Error("Sign in to MoMo bot Cloud first.");
       return request("updates-consent", { token: current.token, signal: AbortSignal.timeout(10_000) });
     },
     async recordUpdatesConsent(status, textVersion) {
       const current = grant;
-      if (!current || state().status !== "connected") throw new Error("Sign in to MausBot Cloud first.");
+      if (!current || state().status !== "connected") throw new Error("Sign in to MoMo bot Cloud first.");
       const result = await request("updates-consent", { method: "POST", body: { status, textVersion }, token: current.token, signal: AbortSignal.timeout(10_000) });
       if (result?.cloudContractVersion !== 1 || result.consent?.status !== status) throw new Error("Invalid Cloud consent response.");
     },

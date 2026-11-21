@@ -1,5 +1,6 @@
 // One bot's own settings, as its Settings panel edits them: each change applies with Undo on a card naming the bot and the
 // exact effect, written through PATCH /api/bots/:id so that route's checks still run.
+import { PRODUCT_NAME } from "../../shared/product-brand.ts";
 import { z } from "zod";
 
 import { approvalModeFor, type ApprovalMode } from "../../shared/approval-mode.ts";
@@ -119,11 +120,11 @@ export function botEntries(deps: Pick<RegistryDeps, "bots" | "engines" | "patchB
       patch: (one, { archived }) => ({ hidden: archived, ...(archived && one.chiefOfStaff ? { chiefOfStaff: false } : {}) }),
     }),
     writable({
-      id: "sidebar.showHelper", label: "Show MausBot in the sidebar", help: "Whether this place's own bot, MausBot, has a row in the sidebar; it keeps working either way.", where: "show-helper",
-      synonyms: ["helper", "starter", "default bot", "mausbot", "show helper"], value: z.boolean(), allowed: "true or false",
+      id: "sidebar.showHelper", label: `Show ${PRODUCT_NAME} in the sidebar`, help: "Whether this place’s built-in helper has a row in the sidebar; it keeps working either way.", where: "show-helper",
+      synonyms: ["helper", "starter", "default bot", "mausbot", PRODUCT_NAME, "show helper"], value: z.boolean(), allowed: "true or false",
       current: () => { const helper = deps.bots().find((one) => one.defaultBot); return helper ? !helper.sidebarHidden : undefined; },
-      describe: (show: boolean) => (deps.bots().some((one) => one.defaultBot) ? { change: show ? "Show MausBot in the sidebar" : "Take MausBot out of the sidebar; it keeps working" } : { refusal: "This place has no MausBot of its own." }),
-      write: (show: boolean) => { const helper = deps.bots().find((one) => one.defaultBot); return helper ? deps.patchBot(helper.id, { sidebarHidden: !show }) : Promise.resolve("This place has no MausBot of its own."); },
+      describe: (show: boolean) => (deps.bots().some((one) => one.defaultBot) ? { change: show ? `Show ${PRODUCT_NAME} in the sidebar` : `Take ${PRODUCT_NAME} out of the sidebar; it keeps working` } : { refusal: "This place has no built-in helper." }),
+      write: (show: boolean) => { const helper = deps.bots().find((one) => one.defaultBot); return helper ? deps.patchBot(helper.id, { sidebarHidden: !show }) : Promise.resolve("This place has no built-in helper."); },
     }),
     perBot({
       id: "bots.tools", label: "Bot tool groups", where: "bot-settings",

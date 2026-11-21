@@ -1,14 +1,10 @@
 import type { Components } from 'react-markdown';
 import ReactMarkdown from 'react-markdown';
 
-const RELEASE_REPOSITORIES = [
-  'milind-soni/OpenMausBot',
-  'milind-soni/openmausbot-releases',
-] as const;
+import { productName, releasesUrl, repository } from '@/lib/shared';
+
 const RELEASES_PER_PAGE = 100;
 const MAX_RELEASE_PAGES = 10;
-const LEGACY_DRAFT_NOTES =
-  /^Draft assembled by the release workflow from milind-soni\/OpenMausBot@([0-9a-f]{40})\. Edit these notes, then publish\.\s*$/i;
 
 interface GitHubRelease {
   body: string | null;
@@ -56,18 +52,7 @@ function compareVersions(
   return 0;
 }
 
-function releaseNotes(release: GitHubRelease) {
-  const body = release.body?.trim();
-  if (!body) return 'No release notes were provided for this build.';
-
-  const legacyDraft = LEGACY_DRAFT_NOTES.exec(body);
-  if (!legacyDraft) return body;
-
-  const commit = legacyDraft[1];
-  return `This build predates curated release notes. [View its source commit (${commit.slice(0, 7)})](https://github.com/milind-soni/OpenMausBot/commit/${commit}).`;
-}
-
-async function fetchPublishedReleases(repository: string): Promise<GitHubRelease[]> {
+async function fetchPublishedReleases(): Promise<GitHubRelease[]> {
   try {
     const token = process.env.GITHUB_RELEASES_TOKEN ?? process.env.GITHUB_TOKEN;
     const releases: GitHubRelease[] = [];
@@ -76,7 +61,7 @@ async function fetchPublishedReleases(repository: string): Promise<GitHubRelease
       const response = await fetch(endpoint, {
         headers: {
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'OpenMausBot-docs',
+          'User-Agent': 'MoMo-Bot-docs',
           'X-GitHub-Api-Version': '2022-11-28',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
@@ -99,17 +84,7 @@ async function fetchPublishedReleases(repository: string): Promise<GitHubRelease
 }
 
 async function publishedReleases(): Promise<GitHubRelease[]> {
-  const [canonical, legacy] = await Promise.all(
-    RELEASE_REPOSITORIES.map((repository) => fetchPublishedReleases(repository)),
-  );
-  const byTag = new Map<string, GitHubRelease>();
-
-  for (const release of [...canonical, ...legacy]) {
-    const tag = release.tag_name.trim().toLowerCase();
-    if (!byTag.has(tag)) byTag.set(tag, release);
-  }
-
-  return [...byTag.values()]
+  return (await fetchPublishedReleases())
     .map((release) => ({ release, version: parseVersion(release.tag_name) }))
     .filter(
       (
@@ -128,8 +103,8 @@ export async function ReleaseChangelog() {
   if (releases.length === 0) {
     return (
       <p>
-        The live release history is temporarily unavailable.{' '}
-        <a href="https://github.com/milind-soni/OpenMausBot/releases">Browse releases on GitHub</a>.
+        No published {productName} releases are listed here yet.{' '}
+        <a href={releasesUrl}>Browse releases on GitHub</a>.
       </p>
     );
   }
@@ -144,7 +119,7 @@ export async function ReleaseChangelog() {
               {version} — {displayDate(release.published_at!)}
             </h2>
             <ReactMarkdown components={markdownComponents}>
-              {releaseNotes(release)}
+              {release.body?.trim() || 'No release notes were provided for this build.'}
             </ReactMarkdown>
             <p>
               <a href={release.html_url} rel="noreferrer" target="_blank">

@@ -486,7 +486,8 @@ export function PhoneDevicesSection({ profileEmail = "", focusRequest = 0, simpl
         <SettingsGroup label={t("phone.reach.title")} block="reach">
           <SettingsRows>
             <RouteRow c={c} state={state} route="wifi" blocked={managedBy} />
-            <RouteRow c={c} state={state} route="relay" blocked={managedBy} onSignIn={() => setPairing("device")} />
+            {(c.account?.available !== false || state.routes?.relay?.on) &&
+              <RouteRow c={c} state={state} route="relay" blocked={managedBy} onSignIn={() => setPairing("device")} />}
             <SettingRow title={t("remote.keepAwake")} subtitle={t("phone.reach.awakeLine")} inert={!anyRoute ? t("remote.keepAwakeNeedsRoute") : undefined}>
               <Switch checked={state.keepAwake} aria-label={t("remote.keepAwakeAria")} disabled={c.busy || !anyRoute}
                 onClick={() => void c.act((companion) => companion.keepAwake(!state.keepAwake))} />
@@ -535,7 +536,7 @@ export function PhoneDevicesSection({ profileEmail = "", focusRequest = 0, simpl
  * desktop app never opens a store or a download. The code itself, and "scan this code", appear only in the dialog. */
 export function PairRow({ reason, children }: { reason?: string | null; children: React.ReactNode }) {
   return (
-    <SettingRow title={t("phone.pair.rowTitle")} subtitle={t("phone.pair.rowLine", { app: productName() })} message={reason ?? undefined}>
+    <SettingRow title={t("phone.pair.rowTitle")} subtitle={t("phone.pair.rowLine")} message={reason ?? undefined}>
       {children}
     </SettingRow>
   );

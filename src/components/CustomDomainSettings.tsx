@@ -1,3 +1,4 @@
+import { DOCS_SOURCE } from "@/lib/app-links";
 import { useEffect, useState } from "react";
 import { Check, Copy } from "lucide-react";
 import { api } from "@/state/store";
@@ -88,7 +89,7 @@ export function customDomainProxyExample(status: Pick<CustomDomainStatus, "appPo
 
 /** The self-hosting guide's section on custom domains: the server steps (DNS, the HTTPS proxy, ports) live there, behind
  * the row's Learn more, never inline in Settings. */
-export const CUSTOM_DOMAIN_GUIDE_URL = "https://github.com/milind-soni/OpenMausBot/blob/main/docs/self-hosting.md#connect-a-custom-domain-in-settings";
+export const CUSTOM_DOMAIN_GUIDE_URL = `${DOCS_SOURCE}/self-hosting.md#connect-a-custom-domain-in-settings`;
 
 export function CustomDomainSettings() {
   const [status, setStatus] = useState<CustomDomainStatus | null>(null);

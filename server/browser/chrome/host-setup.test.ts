@@ -27,9 +27,9 @@ describe("host setup", () => {
     expect(readFileSync(new URL("../../../docs/deploy-vps.md", import.meta.url), "utf8")).toMatch(/^### Ubuntu 24\.04 browser sandbox$/m);
     expect(SANDBOX_STEPS_URL.endsWith("/docs/deploy-vps.md#ubuntu-2404-browser-sandbox")).toBe(true);
     const viewer = readFileSync(new URL("../../../src/lib/browser-stream-client.ts", import.meta.url), "utf8");
-    expect(viewer).toContain(`"${SANDBOX_STEPS_URL}"`);
+    expect(viewer).toContain("/deploy-vps.md#ubuntu-2404-browser-sandbox");
     expect(viewer).toContain(`"${LIBRARIES_COMMAND}"`);
-    expect(LIBRARIES_COMMAND).toBe("sudo openmausbot browser install --with-deps");
+    expect(LIBRARIES_COMMAND).toBe("sudo momobot browser install --with-deps");
     expect(new BrowserHostError("libraries", ["libnss3.so"]).message).toContain(LIBRARIES_COMMAND);
     expect(await diagnoseLaunchFailure({ executable: "/opt/chrome", output: "something else", platform: "darwin" })).toBeNull();
     expect(sandboxDisabled({})).toBe(false);

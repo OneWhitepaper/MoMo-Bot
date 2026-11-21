@@ -8,7 +8,8 @@ import { bodyName } from "@/lib/mascot-names";
 import type { Bot } from "@/state/store";
 import { BOT_PROFILE_LIMITS } from "../../shared/bot-profile";
 import { MASCOT_BODY_IDS } from "../../shared/mascot-bodies";
-import { MausAvatar } from "./Avatar";
+import { DEFAULT_BOT_NAME } from "@/lib/default-bot";
+import { MausAvatar, usesProductAvatar } from "./Avatar";
 import { AvatarImageGenerator } from "./AvatarImageGenerator";
 import type { AvatarPatch, useAvatarImage } from "./avatar-editing";
 
@@ -25,7 +26,7 @@ export function MausBotCustomize({ preview, name, nameRef, image, onName, onPatc
   onPatch(patch: AvatarPatch): void;
 }) {
   const [generating, setGenerating] = useState(false);
-  const picture = Boolean(preview.avatarUrl) && preview.avatarCrop !== "mascot";
+  const picture = usesProductAvatar(preview) || (Boolean(preview.avatarUrl) && preview.avatarCrop !== "mascot");
   const shape = (patch: AvatarPatch) => onPatch({ ...patch, avatarCrop: "mascot" });
   return (
     <div className="space-y-3 rounded-2xl bg-ink/[0.03] p-3.5 text-left">
@@ -35,7 +36,7 @@ export function MausBotCustomize({ preview, name, nameRef, image, onName, onPatc
           ref={nameRef}
           value={name}
           maxLength={BOT_PROFILE_LIMITS.name}
-          placeholder="MausBot"
+          placeholder={DEFAULT_BOT_NAME}
           data-mausbot-welcome-name=""
           onChange={(event) => onName(event.target.value)}
           className="mt-1 w-full rounded-lg border border-hairline/40 bg-inset px-3 py-2 text-[14px] text-ink focus:outline-none"
@@ -53,7 +54,7 @@ export function MausBotCustomize({ preview, name, nameRef, image, onName, onPatc
               aria-label={t(MAUS_COLOR_LABEL[color])}
               title={t(MAUS_COLOR_LABEL[color])}
               data-mausbot-welcome-color={color}
-              onClick={() => shape({ color })}
+              onClick={() => shape({ color, ...(usesProductAvatar(preview) ? { mascotBody: "cursor" } : {}) })}
               className={cn("size-6 rounded-full border-2 transition-transform hover:scale-110", !picture && preview.color === color ? "border-ink" : "border-transparent")}
               style={{ background: colorSwatch(color) }}
             />
@@ -103,7 +104,7 @@ export function MausBotCustomize({ preview, name, nameRef, image, onName, onPatc
         {image.error && <p role="alert" data-mausbot-welcome-error="" className="mt-1 px-2 text-[13px] text-danger">{image.error}</p>}
         {generating && (
           <div className="mt-2">
-            <AvatarImageGenerator botLabel={name || "MausBot"} disabled={image.uploading} generating={image.generating} onGenerate={image.generate} />
+            <AvatarImageGenerator botLabel={name || DEFAULT_BOT_NAME} disabled={image.uploading} generating={image.generating} onGenerate={image.generate} />
           </div>
         )}
       </div>

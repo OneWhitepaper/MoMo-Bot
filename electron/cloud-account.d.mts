@@ -57,7 +57,7 @@ export interface CloudAccountState {
    * starts the 30-minute watch again). `link`: main keeps its page, so Reopen
    * and Copy link use that same page. */
   checkout?: { plan: string; startedAt: number; signIn?: true; link?: true; done?: true };
-  /** This app talks to the staging Admin (OMB_CLOUD_STAGING=1): test payments, test Clouds. */
+  /** This app talks to the staging Admin (MOMO_CLOUD_STAGING=1): test payments, test Clouds. */
   staging?: true;
   /** Unavailable: the saved sign-in can't be read (`restore-failed`, offered after a few tries) or removed
    * (`signout-storage-failed`); `resetSaved()` clears it so the person can sign in again. */
@@ -256,8 +256,6 @@ export interface CloudPlanBridge {
   restartNow?(): Promise<"restarting" | "current" | "failed">;
 }
 
-export declare const CLOUD_ORIGIN: string;
-export declare const STAGING_CLOUD_ORIGIN: string;
 export declare function cloudTarget(env?: Record<string, string | undefined>): {
   origin: string; staging: boolean;
   /** Under userData: the sign-in, saved servers, Files' folder, the Cloud's chosen name. */
@@ -269,7 +267,7 @@ export declare const CLOUD_CANCEL_ANSWERS: readonly CloudCancelAnswer[];
 /** The survey as main sends it (trimmed; words without a reason as `other`), or null when it says nothing or isn't one. */
 export declare function cancelSurvey(input: unknown): { answer: CloudCancelAnswer; expected?: string; improve?: string } | null;
 export declare function checkoutDestination(value: unknown, options?: { fixture?: boolean; staging?: boolean }): string | null;
-export declare function cloudOrigin(value?: string, fixture?: boolean): string;
+export declare function cloudOrigin(value: string | undefined, fixture?: boolean, configuredOrigin?: string): string;
 export interface CloudAccountStore {
   read(): Promise<unknown>;
   write(value: unknown): Promise<void>;
@@ -389,7 +387,9 @@ export declare function createCloudAccountClient(options: {
   platform: string;
   deviceName: string;
   appVersion?: string;
-  origin?: string;
+  origin: string;
+  configuredOrigin?: string;
+  staging?: boolean;
   /** Enables HTTP loopback only for isolated fixtures. Production main never sets it. */
   fixture?: boolean;
   fetch?: typeof fetch;

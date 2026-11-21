@@ -10,6 +10,8 @@ import { createShareHost, readFolderFromDisk } from "./share.ts";
 import { prepareSkillFolder, skillFilePathProblem as storablePath } from "./skill-folder.ts";
 import type { BotRecord } from "./store.ts";
 
+const env = { OMB_TEAM_LIBRARY_REPOSITORY: "https://github.com/example/templates" };
+
 const SKILL = "---\nname: report\ndescription: Weekly report.\n---\n\n# Report\n\nRun scripts/report.py.\n";
 const SCRIPT = "import os\ntoken = os.environ['REPORT_TOKEN']\nprint('ok')\n";
 const KEY = `ghp_${"a".repeat(36)}`;
@@ -27,14 +29,14 @@ const helper = { id: "bot-1", name: "Reporter", title: "Reports", color: "blue" 
 
 function host(stored: Array<{ path: string; content: string | Uint8Array }> | null, submitted: CommunitySubmission[] = []) {
   const dataDir = scratch(), botFolder = scratch();
-  const publisher = createCommunityPublisher({ access: () => ({ kind: "desktop", url: "https://admin.example.com/api/cloud/pages/token", token: "t" }) });
+  const publisher = createCommunityPublisher({ env, access: () => ({ kind: "desktop", url: "https://admin.example.com/api/cloud/pages/token", token: "t" }) });
   return createShareHost({
     dataDir, bots: () => [helper], groups: () => [], routines: () => [], brief: () => undefined,
     collectTeamSkills: () => ({ ok: true, skipped: [], skillsByBot: new Map([["bot-1", [{ name: "report", description: "Weekly report.", instructions: SKILL, enabled: true }]]]) }),
     skillFiles: () => stored, picture: () => undefined, botFolder: (id) => join(botFolder, id),
     publisher: { ...publisher, submit: async (submission) => {
       submitted.push(submission);
-      return { ok: true, link: "https://github.com/milind-soni/openmausbot-teams/tree/main/teams/reporter", prUrl: "https://github.com/milind-soni/openmausbot-teams/pull/1" };
+      return { ok: true, link: "https://github.com/example/templates/tree/main/teams/reporter", prUrl: "https://github.com/example/templates/pull/1" };
     } },
     patch: () => {},
   });

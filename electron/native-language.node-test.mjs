@@ -19,12 +19,13 @@ test("main's Cloud account factory keeps the same client in the current app lang
   const prefs = createDesktopPrefs({ read: () => ({ language: "en" }), write: () => assert.fail("unexpected preference write") });
   const initialization = MAIN.match(/^const nativeText = .+$/m)?.[0];
   assert.ok(initialization, "main initializes its native text and Cloud account factory");
+  const origin = "https://cloud.example.test";
   const { text, createClient } = vm.runInNewContext(`${initialization}\n({ text: nativeText, createClient: createCloudAccountClient })`, {
     app: { isReady: () => true, getLocale: () => "en" },
-    createDesktopText: app => createDesktopText(app, prefs), cloudAccountClient,
+    createDesktopText: app => createDesktopText(app, prefs), cloudAccountClient, cloudTarget: () => ({ origin }), process: { env: {} },
   });
   const client = createClient({
-    store: {}, platform: "darwin", deviceName: "Test computer", appVersion: "1.0.0",
+    store: {}, origin, platform: "darwin", deviceName: "Test computer", appVersion: "1.0.0",
     fetch: () => assert.fail("unexpected Cloud request"),
   });
   await assert.rejects(client.pairHome(), { message: "My Cloud is not ready to connect yet." });
@@ -98,8 +99,8 @@ test("a new language redraws main's menu, both trays, the window title and the b
 
   text.set("pt-br");
   context.applyNativeLanguage();
-  assert.deepEqual(calls, [["menu", "Servidor"], ["title", "OpenMausBot — Hospedado: Office (office.example.test)"], ["badge", "Nenhuma conversa não lida"]]);
-  assert.deepEqual(said(trays[0]), ["Abrir o OpenMausBot", "Sair do OpenMausBot"]);
+  assert.deepEqual(calls, [["menu", "Servidor"], ["title", "MoMo bot — Hospedado: Office (office.example.test)"], ["badge", "Nenhuma conversa não lida"]]);
+  assert.deepEqual(said(trays[0]), ["Abrir o MoMo bot", "Sair do MoMo bot"]);
   assert.deepEqual(said(trays[1]), ["My Cloud com acesso a este PC", "Pausar", "Permitir que os Clouds executem comandos neste PC", "Ver atividade"]);
-  assert.equal(trays[1].tip, "OpenMausBot: My Cloud com acesso a este PC");
+  assert.equal(trays[1].tip, "MoMo bot: My Cloud com acesso a este PC");
 });

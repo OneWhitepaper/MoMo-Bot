@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "../../shared/product-brand.ts";
 import { isWindowPrefId, WINDOW_PREFS, windowPrefReportSchema, type WindowPrefId } from "../../shared/app-settings.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteContext, type RouteHandler } from "./table.ts";
@@ -41,8 +42,8 @@ export function createWindowPrefs(deps: {
     routes,
     read: (id: WindowPrefId) => values.get(id),
     write(id: WindowPrefId, value: unknown): string | null {
-      if (!deps.windowOpen()) return "Open MausBot on this computer first; this setting lives in the app window.";
-      if (!values.has(id)) return "The open MausBot window can't change this here. It is changed in MausBot's desktop app on this computer.";
+      if (!deps.windowOpen()) return `Open ${PRODUCT_NAME} on this computer first; this setting lives in the app window.`;
+      if (!values.has(id)) return `The current window can’t change this setting. Open ${PRODUCT_NAME} on this computer to change it.`;
       values.set(id, value);
       deps.broadcast({ kind: "window-pref", id, value }, { adminOnly: true });
       return null;

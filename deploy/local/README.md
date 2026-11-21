@@ -11,8 +11,8 @@ The `.env` file is ignored by Git. Shell environment variables take precedence.
 `OMB_HTTP_PORT` changes the host port and the default public URL.
 Caddy reaches the server over Unix sockets in the `edge` volume, never its ports.
 `ENGINES` selects space-separated npm packages; an empty value skips installation.
-The image also carries Grok Build, pinned by `GROK_VERSION` in
-`deploy/local/Dockerfile`; Grok and Codex sign in from the app's engine setup
+The image also carries Grok Build, pinned by `GROK_VERSION` in the project
+`Dockerfile`; Grok and Codex sign in from the app's engine setup
 with a one-time code, no terminal needed.
 
 For Tailscale Serve, set `OMB_PUBLIC_URL` to your HTTPS URL and
@@ -51,7 +51,7 @@ Sign in and pair:
 
 ```sh
 docker compose exec omb codex login --device-auth
-docker compose exec omb openmausbot pair
+docker compose exec omb momobot pair
 ```
 
 With the defaults, `pair` prints a sign-in link for a browser on the Docker
@@ -60,10 +60,10 @@ there and name the address they use (only on a machine behind your router):
 
 ```sh
 OMB_BIND_ADDRESS=0.0.0.0 OMB_PUBLIC_URL=http://192.168.1.20:8080 docker compose up -d
-docker compose exec omb openmausbot pair    # Link http://192.168.1.20:8080/pair#code=…
+docker compose exec omb momobot pair    # Link http://192.168.1.20:8080/pair#code=…
 ```
 
-Paste that link into MausBot under **＋ → Connect to a server**; the app
+Paste that link into MoMo bot under **＋ → Connect to a server**; the app
 accepts plain http on a private network address. The other install methods
 are in [Self-hosting](../../docs/self-hosting.md#golden-paths).
 
@@ -74,5 +74,5 @@ Data and engine credentials persist in the named data volume. For an existing
 volume, set `OMB_DATA_VOLUME` to its name and `OMB_DATA_EXTERNAL=true`.
 Fresh installs create their volume automatically.
 
-Update with `docker compose build --pull` followed by `docker compose up -d`.
+After reviewing and checking out the source revision you want, update with `docker compose up -d --build`.
 Stop with `docker compose stop`. `docker compose down -v` deletes managed volumes.

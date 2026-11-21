@@ -268,35 +268,16 @@ function preload(origin, { activation = false, saved = null, language = null } =
   return { bridge, invoked, synced, sent, tell: (channel, ...args) => heard.get(channel)({}, ...args) };
 }
 
-test("the preload gives every page of the window the notices and the switch's state, and only This computer's page a way to set it", async () => {
-  for (const origin of [CLOUD, VPS]) {
-    const page = preload(origin, { saved: false });
-    assert.equal(typeof page.bridge.desktopNotices.state, "function", origin);
-    assert.equal(page.bridge.cloudAccount, undefined, origin);
-    const asked = () => page.synced.filter(channel => channel.startsWith("desktop-"));
-    assert.deepEqual(asked(), [], "nothing is asked until analytics asks");
-    assert.equal(page.bridge.desktopAnalytics.enabled(), false, "turned off on this desktop");
-    assert.deepEqual(asked(), ["desktop-analytics:read"]);
-    assert.equal(page.bridge.desktopAnalytics.set, undefined, "a server's page cannot change the desktop's switch");
-    await page.bridge.desktopNotices.state(); await page.bridge.desktopNotices.seen({ toString: () => POPUP });
+test("the preload never opts into analytics, including on previously configured desktops", async () => {
+  for (const origin of [LOCAL, CLOUD, VPS]) {
+    const page = preload(origin, { saved: true });
+    assert.equal(page.bridge.desktopAnalytics.enabled(), false, origin);
+    assert.equal(page.bridge.desktopAnalytics.set, undefined, origin);
+    assert.deepEqual(page.synced.filter(channel => channel.startsWith("desktop-")), []);
+    await page.bridge.desktopNotices.state();
+    await page.bridge.desktopNotices.seen({ toString: () => POPUP });
     assert.deepEqual(page.invoked, [["desktop-notices:state"], ["desktop-notices:seen", POPUP]]);
-    assert.deepEqual(Object.keys(page.bridge.desktopNotices), ["state", "seen", "shown"], "no page moves the window to this computer");
   }
-  const local = preload(LOCAL, { activation: true, saved: false });
-  assert.equal(typeof local.bridge.desktopNotices.state, "function");
-  assert.deepEqual(local.synced, [], "nothing is asked until analytics asks");
-  assert.equal(local.bridge.desktopAnalytics.enabled(), false, "answered at once, before anything loads");
-  assert.equal(local.bridge.desktopAnalytics.enabled(), false);
-  assert.deepEqual(local.synced, ["desktop-analytics:read"], "asked once a page");
-  await local.bridge.desktopAnalytics.set(true);
-  assert.equal(local.bridge.desktopAnalytics.enabled(), true);
-  assert.deepEqual(local.invoked, [["desktop-analytics:set", true]]);
-  const unsaved = preload(LOCAL);
-  for (let i = 0; i < 3; i++) assert.equal(unsaved.bridge.desktopAnalytics.enabled(), null);
-  assert.deepEqual(unsaved.synced, ["desktop-analytics:read"], "no choice saved yet is asked once too");
-  assert.equal(preload(LOCAL, { saved: "off" }).bridge.desktopAnalytics.enabled(), null);
-  const safe = PRELOAD.match(/const REMOTE_SAFE = new Set\(\[([^\]]*)\]\)/)[1];
-  assert.ok(safe.includes('"desktopNotices"')); assert.ok(safe.includes('"desktopAnalytics"'));
 });
 
 test("the preload gives every page of the window the app language this computer keeps", async () => {

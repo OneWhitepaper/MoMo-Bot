@@ -62,6 +62,7 @@ const baseStorage = {
 vi.stubGlobal("localStorage", baseStorage);
 
 beforeEach(() => {
+  vi.stubEnv("VITE_MOMO_ANALYTICS_TOKEN", "phc_test");
   store.clear();
   ph.loads = 0;
   ph.fail = false;
@@ -75,7 +76,7 @@ beforeEach(() => {
   ph.optIns = [];
 });
 // Restored in afterEach: an inline restore would be skipped when an assertion fails mid-test.
-afterEach(() => vi.stubGlobal("localStorage", baseStorage));
+afterEach(() => { vi.stubGlobal("localStorage", baseStorage); vi.unstubAllEnvs(); });
 
 // resetModules keeps the mocked posthog-js cached, so it is registered again and `loads` counts this graph only.
 async function freshAnalytics() {
@@ -105,6 +106,16 @@ describe("optAction", () => {
 });
 
 describe("the stored choice", () => {
+  it("does not load PostHog or opt in without a configured project", async () => {
+    vi.stubEnv("VITE_MOMO_ANALYTICS_TOKEN", "");
+    const analytics = await freshAnalytics();
+    analytics.setAnalyticsEnabled(true);
+    await analytics.initAnalytics();
+    analytics.track("app_opened");
+    expect(analytics.analyticsEnabled()).toBe(false);
+    expect(ph.loads).toBe(0);
+    expect(ph.calls).toEqual([]);
+  });
   it("is on for a fresh install", () => {
     expect(analyticsEnabled()).toBe(true);
   });
