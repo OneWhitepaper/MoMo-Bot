@@ -33,10 +33,8 @@ const TIER = /^[a-z][a-z0-9-]{0,23}$/;
 const REFRESH_MS = 60_000;
 const STEADY_MS = 15 * 60_000;
 const SETUP_REFRESH_MS = 15_000;
-/** While My Cloud sleeps and Files or lending waits for it: the session every 15 s, so they resume soon after it wakes. */
 const ASLEEP_REFRESH_MS = 15_000;
 const WAKE_STATES = Object.freeze(["awake", "waking"]);
-/** While a checkout this app opened waits for its payment and setup: the session every 3 s (30 minutes at most). */
 const WATCH_REFRESH_MS = 3_000;
 const CHECKING_AFTER = 2;
 const MAX_ENROLL_SECONDS = 1800;
@@ -50,10 +48,6 @@ const CONFIRMATION = /^[A-Za-z0-9_-]{43}$/;
 /** The cancel sheet's reasons, as the Admin takes them. */
 export const CLOUD_CANCEL_ANSWERS = Object.freeze(["feature", "price", "setup", "broken", "later", "other"]);
 const SURVEY_TEXT_MAX = 2_000, SURVEY_WAIT_MS = 8_000;
-/**
- * The cancel sheet's survey as main sends it: one reason and each box trimmed, at most 2,000 characters. Words without a
- * reason are kept as `other`; null when nothing was said, and for anything that isn't a survey (it is never sent then).
- */
 export function cancelSurvey(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
   const box = value => typeof value === "string" ? value.trim() : "";

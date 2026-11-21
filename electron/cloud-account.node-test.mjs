@@ -7,7 +7,6 @@ import nativeText from "./native-text.cjs";
 import { accessToken, fixture, until } from "./fixtures/cloud-account.mjs";
 import { cancelSurvey, CHECKOUT_SOURCES, checkoutDestination, cloudMenuSublabel, createCloudAccountStore, cloudOrigin, cloudPlanSnapshot } from "./cloud-account.mjs";
 
-
 test("the Cloud client trusts only its configured origin or explicit loopback fixtures", () => {
   const own = "https://cloud.example.test";
   assert.throws(() => cloudOrigin());
@@ -840,7 +839,6 @@ test("usage meter: the session's usage reaches the state and the Cloud page's sn
   assert.deepEqual(shown, { outcome: "preview", preview: { plan: "max", from: "pro", trial: false, price: 9900, chargeNow: 3300, tax: 0, nextBillingAt, expiresAt } });
   assert.ok(!JSON.stringify(shown).includes(confirmation) && !JSON.stringify(f.client.state()).includes(confirmation));
   assert.deepEqual(JSON.parse(f.requests.findLast(request => request.route === "/api/cloud/desktop/upgrade/preview").body), { plan: "max", source: "app_usage" });
-  // The change carries it, once.
   f.upgrade = { status: 200, body: { cloudContractVersion: 1, status: "upgraded", tier: "max", trial: false } };
   assert.deepEqual(await f.client.upgrade("max", "app_usage"), { outcome: "upgraded", tier: "max" });
   assert.deepEqual(upgrades().map(request => JSON.parse(request.body)), [{ plan: "max", confirmation, source: "app_usage" }]);
